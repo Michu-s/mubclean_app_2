@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../shared/services/auth_service.dart';
 import '../../shared/models/marketplace_models.dart';
-import 'customer_wizard_screen.dart'; // Lo crearemos a continuación
+import 'business_profile_screen.dart'; // <--- CAMBIO: Importamos Perfil en lugar de Wizard directo
 import './customer_requests_screens.dart';
 
 class CustomerHomeScreen extends StatefulWidget {
@@ -17,6 +17,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   final _supabase = Supabase.instance.client;
   List<Negocio> _negocios = [];
   bool _isLoading = true;
+  final Color _primaryBlue = const Color(0xFF1565C0);
 
   @override
   void initState() {
@@ -31,21 +32,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           .select()
           .eq('activo', true)
           .order('nombre');
-
       final data = response as List<dynamic>;
-      if (mounted) {
+      if (mounted)
         setState(() {
           _negocios = data.map((json) => Negocio.fromJson(json)).toList();
           _isLoading = false;
         });
-      }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error cargando negocios: $e')));
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -54,115 +48,187 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final auth = Provider.of<AuthService>(context);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F9FF),
       appBar: AppBar(
-        title: const Text("MubClean Market"),
+        title: Text(
+          "MubClean",
+          style: TextStyle(
+            color: _primaryBlue,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => auth.signOut(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.history),
+            icon: Icon(Icons.history, color: _primaryBlue),
+            tooltip: "Mis Pedidos",
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CustomerRequestsScreen()),
             ),
           ),
+          IconButton(
+            icon: Icon(Icons.logout, color: Colors.red[300]),
+            onPressed: () => auth.signOut(),
+          ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _primaryBlue))
           : _negocios.isEmpty
-          ? const Center(child: Text("No hay negocios disponibles aún."))
+          ? const Center(child: Text("No hay negocios disponibles."))
           : ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               itemCount: _negocios.length,
               itemBuilder: (context, index) {
                 final negocio = _negocios[index];
-                return Card(
-                  elevation: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.08),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      // Navegar al Wizard de Solicitud
-                      Navigator.push(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      // CAMBIO: Navegar al PERFIL DEL NEGOCIO
+                      onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => CustomerWizardScreen(
-                            negocioSeleccionado: negocio,
-                          ),
+                          builder: (_) =>
+                              BusinessProfileScreen(negocio: negocio),
                         ),
-                      );
-                    },
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Imagen de Portada (Placeholder o NetworkImage)
-                        Container(
-                          height: 150,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[300],
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // IMAGEN PORTADA
+                          Container(
+                            height: 160,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                              image: negocio.portadaUrl != null
+                                  ? DecorationImage(
+                                      image: NetworkImage(negocio.portadaUrl!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
                             ),
-                            image: negocio.portadaUrl != null
-                                ? DecorationImage(
-                                    image: NetworkImage(negocio.portadaUrl!),
-                                    fit: BoxFit.cover,
+                            child: negocio.portadaUrl == null
+                                ? Center(
+                                    child: Icon(
+                                      Icons.store,
+                                      size: 50,
+                                      color: Colors.blue[100],
+                                    ),
                                   )
                                 : null,
                           ),
-                          child: negocio.portadaUrl == null
-                              ? const Icon(
-                                  Icons.store,
-                                  size: 50,
-                                  color: Colors.white,
-                                )
-                              : null,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                negocio.nombre,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
+
+                          Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        negocio.nombre,
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green[50],
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          Icon(
+                                            Icons.star,
+                                            size: 14,
+                                            color: Colors.green,
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            "4.8",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.green,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                negocio.descripcion ??
-                                    "Servicios de limpieza profesional",
-                                style: TextStyle(color: Colors.grey[600]),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 8),
-                              const Row(
-                                children: [
-                                  Icon(
-                                    Icons.star,
-                                    size: 16,
-                                    color: Colors.amber,
+                                const SizedBox(height: 8),
+                                Text(
+                                  negocio.descripcion ??
+                                      "Expertos en limpieza de muebles y tapicería.",
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    height: 1.4,
                                   ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    "4.8 (120 res)",
-                                    style: TextStyle(fontSize: 12),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 20),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton(
+                                    // CAMBIO: Navegar al PERFIL DEL NEGOCIO
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => BusinessProfileScreen(
+                                          negocio: negocio,
+                                        ),
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _primaryBlue,
+                                      side: BorderSide(color: _primaryBlue),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                    ),
+                                    child: const Text("VER SERVICIOS"),
                                   ),
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 );

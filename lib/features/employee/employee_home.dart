@@ -16,10 +16,13 @@ class EmployeeHomeScreen extends StatefulWidget {
 
 class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
   final _supabase = Supabase.instance.client;
-  // Usamos dynamic para traer datos anidados (nombre del cliente)
   List<dynamic> _misTrabajos = [];
   bool _isLoading = true;
   String? _mensajeError;
+
+  // Paleta de colores local para consistencia
+  final Color _bluePrimary = const Color(0xFF1565C0); // Azul oscuro
+  final Color _bgLight = const Color(0xFFF5F9FF); // Azul muy claro de fondo
 
   @override
   void initState() {
@@ -38,7 +41,6 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
     if (userId == null) return;
 
     try {
-      // 1. Averiguar mi ID de Empleado (enlace entre auth.uid y el negocio)
       final empleadoRes = await _supabase
           .from('empleados_negocio')
           .select('id')
@@ -49,7 +51,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
         if (mounted)
           setState(() {
             _mensajeError =
-                "No se encontró vinculación laboral.\n\nSi el Admin ya te agregó, es posible que falte refrescar permisos.";
+                "No se encontró vinculación laboral.\nContacta a tu administrador.";
             _isLoading = false;
           });
         return;
@@ -57,7 +59,6 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
 
       final miEmpleadoId = empleadoRes['id'];
 
-      // 2. Buscar trabajos asignados (Agendados o En Proceso)
       final response = await _supabase
           .from('solicitudes')
           .select('*, cliente:cliente_id(nombre_completo)')
@@ -65,22 +66,18 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
           .or('estado.eq.agendada,estado.eq.en_proceso')
           .order('fecha_agendada_final', ascending: true);
 
-      final data = response as List<dynamic>;
-
       if (mounted) {
         setState(() {
-          _misTrabajos = data;
+          _misTrabajos = response as List<dynamic>;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint("Error agenda: $e");
-      if (mounted) {
+      if (mounted)
         setState(() {
-          _mensajeError = "Error de conexión o permisos: $e";
+          _mensajeError = "Error de conexión. Desliza para reintentar.";
           _isLoading = false;
         });
-      }
     }
   }
 
@@ -89,234 +86,306 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
     final auth = Provider.of<AuthService>(context);
 
     return Scaffold(
+      backgroundColor: _bgLight, // Fondo suave
       appBar: AppBar(
-        title: const Text("Mi Ruta"),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          "Mi Agenda",
+          style: TextStyle(color: _bluePrimary, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        iconTheme: IconThemeData(color: _bluePrimary),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _fetchMisAsignaciones,
-          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => auth.signOut(),
+            tooltip: "Cerrar Sesión",
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _fetchMisAsignaciones,
+        color: _bluePrimary,
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(child: CircularProgressIndicator(color: _bluePrimary))
             : _mensajeError != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(30.0),
+            ? _buildErrorView()
+            : _misTrabajos.isEmpty
+            ? _buildEmptyView()
+            : ListView.builder(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 20,
+                ),
+                itemCount: _misTrabajos.length,
+                itemBuilder: (context, index) =>
+                    _buildJobCard(_misTrabajos[index]),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildJobCard(dynamic trabajoMap) {
+    final trabajo = Solicitud.fromJson(trabajoMap);
+    final nombreCliente =
+        trabajoMap['cliente']?['nombre_completo'] ?? 'Cliente';
+    final fechaMostrar = trabajo
+        .fechaSolicitada; // Idealmente usar fecha_agendada_final si existe
+    final esHoy = isSameDay(fechaMostrar, DateTime.now());
+    final enProceso = trabajo.estado == EstadoSolicitud.en_proceso;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        border: enProceso ? Border.all(color: Colors.orange, width: 2) : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EmployeeJobDetail(solicitud: trabajo),
+              ),
+            );
+            _fetchMisAsignaciones();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment
+                  .start, // Alineación superior para textos largos
+              children: [
+                // 1. FECHA (Estilo Calendario)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: esHoy ? _bluePrimary : Colors.blue[50],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
-                        Icons.warning_amber_rounded,
-                        size: 60,
-                        color: Colors.orange,
-                      ),
-                      const SizedBox(height: 20),
                       Text(
-                        _mensajeError!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
+                        DateFormat('dd').format(fechaMostrar),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: esHoy ? Colors.white : _bluePrimary,
                         ),
                       ),
-                      const SizedBox(height: 30),
-                      ElevatedButton.icon(
-                        onPressed: _fetchMisAsignaciones,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text("REINTENTAR CONEXIÓN"),
+                      Text(
+                        DateFormat(
+                          'MMM',
+                          'es',
+                        ).format(fechaMostrar).toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: esHoy
+                              ? Colors.white.withOpacity(0.9)
+                              : _bluePrimary,
+                        ),
                       ),
                     ],
                   ),
                 ),
-              )
-            : _misTrabajos.isEmpty
-            ? ListView(
-                children: const [
-                  SizedBox(height: 100),
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.check_circle_outline,
-                          size: 80,
-                          color: Colors.green,
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          "¡Todo limpio!",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                const SizedBox(width: 16),
+
+                // 2. DETALLES (Con Expanded para evitar overflow)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Badge de Estado
+                      if (enProceso)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[100],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            "EN PROCESO",
+                            style: TextStyle(
+                              color: Colors.orange[900],
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      else if (esHoy)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green[50],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            "PARA HOY",
+                            style: TextStyle(
+                              color: Colors.green[800],
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        Text(
-                          "No tienes trabajos pendientes hoy.",
-                          style: TextStyle(color: Colors.grey),
+
+                      // Nombre Cliente
+                      Text(
+                        nombreCliente,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _misTrabajos.length,
-                itemBuilder: (context, index) {
-                  final trabajoMap = _misTrabajos[index];
-                  final trabajo = Solicitud.fromJson(trabajoMap);
-
-                  // Extraemos nombre del cliente
-                  final nombreCliente =
-                      trabajoMap['cliente']?['nombre_completo'] ?? 'Cliente';
-
-                  // Fechas
-                  final fechaMostrar = trabajo.fechaSolicitada;
-                  final esHoy = isSameDay(fechaMostrar, DateTime.now());
-
-                  return Card(
-                    elevation: 3,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: InkWell(
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                EmployeeJobDetail(solicitud: trabajo),
-                          ),
-                        );
-                        _fetchMisAsignaciones();
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
-                          children: [
-                            // Fecha
-                            Column(
-                              children: [
-                                Text(
-                                  DateFormat('dd').format(fechaMostrar),
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                                Text(
-                                  DateFormat(
-                                    'MMM',
-                                    'es',
-                                  ).format(fechaMostrar).toUpperCase(),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 16),
-                            Container(
-                              width: 1,
-                              height: 50,
-                              color: Colors.grey[300],
-                            ),
-                            const SizedBox(width: 16),
-
-                            // Detalles
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (trabajo.estado ==
-                                      EstadoSolicitud.en_proceso)
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 5),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.orange,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: const Text(
-                                        "EN PROCESO",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-
-                                  Text(
-                                    nombreCliente,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 2),
-
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.location_on,
-                                        size: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          trabajo.direccion,
-                                          style: const TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 13,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    esHoy ? "¡Es para hoy!" : "Programado",
-                                    style: TextStyle(
-                                      color: esHoy ? Colors.green : Colors.grey,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward_ios,
-                              size: 16,
-                              color: Colors.grey,
-                            ),
-                          ],
-                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 4),
+
+                      // Dirección (Flexible para que baje de línea si es necesario)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              trabajo.direccion,
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 13,
+                                height: 1.2,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 3. FLECHA
+                const Padding(
+                  padding: EdgeInsets.only(left: 8, top: 10),
+                  child: Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyView() {
+    return ListView(
+      children: [
+        SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 10,
                     ),
-                  );
-                },
+                  ],
+                ),
+                child: Icon(Icons.task_alt, size: 60, color: Colors.green[300]),
               ),
+              const SizedBox(height: 20),
+              Text(
+                "¡Todo al día!",
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: _bluePrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "No tienes servicios pendientes por ahora.",
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.wifi_off_rounded, size: 60, color: Colors.grey),
+            const SizedBox(height: 20),
+            Text(
+              _mensajeError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 15, color: Colors.grey),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              onPressed: _fetchMisAsignaciones,
+              icon: const Icon(Icons.refresh),
+              label: const Text("REINTENTAR"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _bluePrimary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -14,6 +14,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
 
+  // Colores
+  final Color _primaryBlue = const Color(0xFF1565C0);
+
   void _login() async {
     final auth = Provider.of<AuthService>(context, listen: false);
     final error = await auth.signIn(
@@ -22,9 +25,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (error != null && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -33,78 +36,133 @@ class _LoginScreenState extends State<LoginScreen> {
     final isLoading = Provider.of<AuthService>(context).isLoading;
 
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Center(
-        // 1. Centrar contenido
         child: SingleChildScrollView(
-          // 2. Scroll para el teclado
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.hub, size: 80, color: Colors.blue),
-                const SizedBox(height: 20),
-                const Text(
-                  "MubClean",
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          padding: const EdgeInsets.all(30.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // LOGO
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: _primaryBlue.withOpacity(0.1),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 40),
-                TextField(
-                  controller: _emailCtrl,
-                  decoration: const InputDecoration(
-                    labelText: "Email",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
+                child: Icon(Icons.clean_hands, size: 50, color: _primaryBlue),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "MubClean",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: _primaryBlue,
+                  letterSpacing: -1,
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _passCtrl,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: "Contraseña",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : _login,
-                    style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text("INGRESAR"),
-                  ),
-                ),
-                const SizedBox(height: 20),
+              ),
+              const Text(
+                "Tu servicio de limpieza experto",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+              const SizedBox(height: 50),
 
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("¿No tienes cuenta?"),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const RegisterScreen(),
-                          ),
-                        );
-                      },
-                      child: const Text("Regístrate aquí"),
-                    ),
-                  ],
+              // INPUTS
+              TextField(
+                controller: _emailCtrl,
+                decoration: InputDecoration(
+                  labelText: "Correo Electrónico",
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF5F9FF),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
                 ),
-              ],
-            ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _passCtrl,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "Contraseña",
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF5F9FF),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              // BOTÓN
+              SizedBox(
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : _login,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primaryBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 5,
+                    shadowColor: _primaryBlue.withOpacity(0.4),
+                  ),
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          "INICIAR SESIÓN",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              // REGISTRO
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    "¿Nuevo aquí?",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "Crear Cuenta",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

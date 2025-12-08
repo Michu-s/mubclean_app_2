@@ -44,7 +44,7 @@ class _CustomerRequestDetailScreenState
           .select('*, servicios_catalogo(nombre), fotos_solicitud(foto_url)')
           .eq('solicitud_id', widget.solicitud.id);
 
-      // 2. Evidencia (si existe)
+      // 2. Evidencia (si existe y está completada)
       dynamic evidenciaRes;
       if (_solicitudActual.estado == EstadoSolicitud.completada) {
         evidenciaRes = await _supabase
@@ -54,7 +54,7 @@ class _CustomerRequestDetailScreenState
             .maybeSingle();
       }
 
-      // 3. Refrescar solicitud + DATOS DEL TÉCNICO
+      // 3. Refrescar datos de la solicitud y técnico
       final solRes = await _supabase
           .from('solicitudes')
           .select('*, tecnico:tecnico_asignado_id(perfiles(nombre_completo))')
@@ -95,12 +95,10 @@ class _CustomerRequestDetailScreenState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
-          aceptar ? "Confirmar y Enviar al Negocio" : "Rechazar Oferta",
-        ),
+        title: Text(aceptar ? "Confirmar y Enviar" : "Rechazar Oferta"),
         content: Text(
           aceptar
-              ? "Al aceptar, notificaremos al negocio para que proceda a agendar tu cita y asignar un técnico.\n\nTotal acordado: \$${_solicitudActual.precioTotal}"
+              ? "Al aceptar, notificaremos al negocio para que proceda a agendar tu cita.\n\nTotal: \$${_solicitudActual.precioTotal}"
               : "¿Seguro que deseas cancelar esta solicitud?",
         ),
         actions: [
@@ -117,7 +115,7 @@ class _CustomerRequestDetailScreenState
               backgroundColor: aceptar ? Colors.green : Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: Text(aceptar ? "Sí, Notificar" : "Sí, Rechazar"),
+            child: Text(aceptar ? "Sí, Confirmar" : "Sí, Rechazar"),
           ),
         ],
       ),
@@ -132,7 +130,6 @@ class _CustomerRequestDetailScreenState
           .from('solicitudes')
           .update({'estado': nuevoEstado})
           .eq('id', _solicitudActual.id);
-
       await _fetchDetails();
 
       if (mounted) {
@@ -198,8 +195,18 @@ class _CustomerRequestDetailScreenState
         _solicitudActual.estado == EstadoSolicitud.completada;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F9FF),
       appBar: AppBar(
         title: const Text("Detalle del Pedido"),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        titleTextStyle: const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+        ),
+        iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchDetails),
         ],
@@ -207,7 +214,7 @@ class _CustomerRequestDetailScreenState
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -217,15 +224,14 @@ class _CustomerRequestDetailScreenState
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: colorEstado.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: colorEstado.withOpacity(0.5)),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colorEstado.withOpacity(0.3)),
                     ),
                     child: Row(
                       children: [
-                        Icon(iconoEstado, color: colorEstado, size: 30),
+                        Icon(iconoEstado, color: colorEstado, size: 28),
                         const SizedBox(width: 15),
                         Expanded(
-                          // <--- EXPANDED PARA EVITAR OVERFLOW DE TEXTO
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -243,8 +249,7 @@ class _CustomerRequestDetailScreenState
                                   fontWeight: FontWeight.bold,
                                   color: colorEstado,
                                 ),
-                                overflow: TextOverflow
-                                    .ellipsis, // <--- Evita desbordamiento
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
@@ -254,221 +259,240 @@ class _CustomerRequestDetailScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  // CONFIRMACIÓN VISUAL (SI ESTÁ ACEPTADA PERO NO AGENDADA)
-                  if (_solicitudActual.estado == EstadoSolicitud.aceptada)
+                  // --- EVIDENCIA FINAL Y COMENTARIOS (NUEVO) ---
+                  if (_solicitudActual.estado == EstadoSolicitud.completada &&
+                      _evidencia != null) ...[
                     Container(
-                      margin: const EdgeInsets.only(bottom: 20),
+                      width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.green[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade300),
-                      ),
-                      child: const Column(
-                        children: [
-                          Icon(
-                            Icons.hourglass_bottom,
-                            color: Colors.green,
-                            size: 40,
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.green.withOpacity(0.1),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
                           ),
-                          SizedBox(height: 10),
-                          Text(
-                            "¡Cotización Aceptada!",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
+                        ],
+                        border: Border.all(
+                          color: Colors.green.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.green),
+                              SizedBox(width: 10),
+                              Text(
+                                "Trabajo Terminado",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 25),
+
+                          // FOTO EVIDENCIA
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              _evidencia!['foto_url'],
+                              height: 200,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (ctx, child, progress) =>
+                                  progress == null
+                                  ? child
+                                  : Container(
+                                      height: 200,
+                                      color: Colors.grey[100],
+                                      child: const Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    ),
                             ),
                           ),
-                          Text(
-                            "Esperando que el negocio asigne técnico...",
-                            style: TextStyle(color: Colors.grey),
-                            textAlign: TextAlign.center,
-                          ),
+
+                          // COMENTARIOS DEL TÉCNICO
+                          if (_evidencia!['comentario_tecnico'] != null &&
+                              _evidencia!['comentario_tecnico']
+                                  .toString()
+                                  .isNotEmpty) ...[
+                            const SizedBox(height: 15),
+                            const Text(
+                              "Notas del Técnico:",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                _evidencia!['comentario_tecnico'],
+                                style: TextStyle(
+                                  color: Colors.grey[800],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
-
-                  // EVIDENCIA FINAL (Si terminó)
-                  if (_solicitudActual.estado == EstadoSolicitud.completada &&
-                      _evidencia != null) ...[
-                    const Text(
-                      "Resultado Final",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        _evidencia!['foto_url'],
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 25),
                   ],
 
-                  // DATOS DE LA CITA CONFIRMADA
+                  // CITA CONFIRMADA
                   if (estaConfirmada && _fechaConfirmada != null)
-                    Card(
-                      elevation: 2,
-                      color: Colors.blue[50],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.blue.shade200),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.blue.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            const Text(
-                              "🗓️ CITA CONFIRMADA",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue,
-                                letterSpacing: 1.2,
-                              ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            "🗓️ CITA CONFIRMADA",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                              letterSpacing: 1.2,
                             ),
-                            const Divider(color: Colors.blue),
-                            const SizedBox(height: 10),
+                          ),
+                          const SizedBox(height: 15),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Column(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_month,
+                                    color: Colors.blue,
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    DateFormat(
+                                      'dd MMM yyyy',
+                                      'es',
+                                    ).format(_fechaConfirmada!),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                children: [
+                                  const Icon(
+                                    Icons.access_time_filled,
+                                    color: Colors.blue,
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    _horaConfirmada != null
+                                        ? _horaConfirmada!.substring(0, 5)
+                                        : "---",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          if (_nombreTecnico != null) ...[
+                            const Divider(height: 25),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Column(
-                                  children: [
-                                    const Icon(
-                                      Icons.calendar_today,
-                                      color: Colors.blue,
-                                    ),
-                                    const SizedBox(height: 5),
-                                    Text(
-                                      DateFormat(
-                                        'dd MMM yyyy',
-                                        'es',
-                                      ).format(_fechaConfirmada!),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
+                                const Icon(
+                                  Icons.person,
+                                  size: 18,
+                                  color: Colors.grey,
                                 ),
-                                Column(
-                                  children: [
-                                    const Icon(
-                                      Icons.access_time,
-                                      color: Colors.blue,
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    "Técnico: $_nombreTecnico",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
                                     ),
-                                    const SizedBox(height: 5),
-                                    Text(
-                                      _horaConfirmada != null
-                                          ? _horaConfirmada!.substring(0, 5)
-                                          : "---",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 15),
-                            // --- AQUÍ MOSTRAMOS AL TÉCNICO ---
-                            if (_nombreTecnico != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                  horizontal: 16,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.person,
-                                      size: 18,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Flexible para evitar overflow si el nombre es muy largo
-                                    Flexible(
-                                      child: Text(
-                                        "Técnico: $_nombreTecnico",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
                           ],
-                        ),
+                        ],
                       ),
                     ),
 
                   const SizedBox(height: 20),
 
                   // DIRECCIÓN
-                  Card(
-                    elevation: 0,
-                    color: Colors.grey[50],
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Colors.grey.shade200),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
+                  _buildSectionContainer(
+                    child: Column(
+                      children: [
+                        _buildInfoRow(
+                          Icons.location_on,
+                          "Dirección",
+                          _solicitudActual.direccion,
+                        ),
+                        if (!estaConfirmada) ...[
+                          const Divider(height: 25),
                           _buildInfoRow(
-                            Icons.location_on,
-                            "Dirección",
-                            _solicitudActual.direccion,
+                            Icons.calendar_today,
+                            "Fecha Solicitada",
+                            DateFormat(
+                              'dd MMMM yyyy',
+                              'es',
+                            ).format(_solicitudActual.fechaSolicitada),
                           ),
-                          if (!estaConfirmada) ...[
-                            const Divider(),
-                            _buildInfoRow(
-                              Icons.calendar_today,
-                              "Fecha Solicitada",
-                              DateFormat(
-                                'dd MMMM yyyy',
-                                'es',
-                              ).format(_solicitudActual.fechaSolicitada),
-                            ),
-                          ],
                         ],
-                      ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 25),
 
-                  // DESGLOSE
+                  // DETALLE DE COSTOS
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Expanded(
-                        child: Text(
-                          "Detalle de Cotización",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                      const Text(
+                        "Detalle de Cotización",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
                       ),
                       if (_solicitudActual.precioTotal > 0)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
+                            horizontal: 12,
+                            vertical: 6,
                           ),
                           decoration: BoxDecoration(
                             color: Colors.blue[50],
@@ -491,23 +515,40 @@ class _CustomerRequestDetailScreenState
                         item['fotos_solicitud'] as List<dynamic>? ?? [];
                     final precioUnitario = item['precio_unitario'] ?? 0;
 
-                    return Card(
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
                       child: Padding(
-                        padding: const EdgeInsets.all(12.0),
+                        padding: const EdgeInsets.all(16.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                CircleAvatar(
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue[50],
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                   child: Text(
-                                    "${item['cantidad']}",
+                                    "${item['cantidad']}x",
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
+                                      color: Colors.blue,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 15),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -543,7 +584,7 @@ class _CustomerRequestDetailScreenState
                               ],
                             ),
                             if (fotos.isNotEmpty) ...[
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 12),
                               SizedBox(
                                 height: 60,
                                 child: ListView.builder(
@@ -573,7 +614,7 @@ class _CustomerRequestDetailScreenState
 
                   const SizedBox(height: 30),
 
-                  // BOTONES
+                  // BOTONES ACCIÓN
                   if (_solicitudActual.estado == EstadoSolicitud.cotizada) ...[
                     const Text(
                       "El negocio ha enviado una cotización. ¿Deseas proceder?",
@@ -589,6 +630,10 @@ class _CustomerRequestDetailScreenState
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               foregroundColor: Colors.red,
+                              side: const BorderSide(color: Colors.red),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: const Text("RECHAZAR"),
                           ),
@@ -601,6 +646,9 @@ class _CustomerRequestDetailScreenState
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: const Text("ACEPTAR OFERTA"),
                           ),
@@ -614,12 +662,30 @@ class _CustomerRequestDetailScreenState
     );
   }
 
+  Widget _buildSectionContainer({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
   Widget _buildInfoRow(IconData icon, String title, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: Colors.grey[600]),
-        const SizedBox(width: 10),
+        Icon(icon, size: 20, color: Colors.grey[400]),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -634,6 +700,7 @@ class _CustomerRequestDetailScreenState
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
+                  height: 1.3,
                 ),
               ),
             ],

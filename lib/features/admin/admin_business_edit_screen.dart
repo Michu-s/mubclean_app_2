@@ -25,6 +25,8 @@ class _AdminBusinessEditScreenState extends State<AdminBusinessEditScreen> {
   File? _nuevoLogo;
   File? _nuevaPortada;
 
+  final Color _primaryBlue = const Color(0xFF1565C0);
+
   @override
   void initState() {
     super.initState();
@@ -39,9 +41,7 @@ class _AdminBusinessEditScreenState extends State<AdminBusinessEditScreen> {
           .select()
           .eq('owner_id', userId)
           .single();
-
       _negocioId = res['id'];
-
       setState(() {
         _nombreCtrl.text = res['nombre'];
         _descCtrl.text = res['descripcion'] ?? '';
@@ -51,7 +51,6 @@ class _AdminBusinessEditScreenState extends State<AdminBusinessEditScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint("Error negocio: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -64,11 +63,10 @@ class _AdminBusinessEditScreenState extends State<AdminBusinessEditScreen> {
     );
     if (picked != null) {
       setState(() {
-        if (esPortada) {
+        if (esPortada)
           _nuevaPortada = File(picked.path);
-        } else {
+        else
           _nuevoLogo = File(picked.path);
-        }
       });
     }
   }
@@ -79,7 +77,6 @@ class _AdminBusinessEditScreenState extends State<AdminBusinessEditScreen> {
       String? logoFinal = _logoUrl;
       String? portadaFinal = _portadaUrl;
 
-      // Subir Logo si cambió (usa bucket 'muebles' o crea uno 'negocios')
       if (_nuevoLogo != null) {
         final path =
             'logos/$_negocioId-${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -87,7 +84,6 @@ class _AdminBusinessEditScreenState extends State<AdminBusinessEditScreen> {
         logoFinal = _supabase.storage.from('muebles').getPublicUrl(path);
       }
 
-      // Subir Portada si cambió
       if (_nuevaPortada != null) {
         final path =
             'portadas/$_negocioId-${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -113,123 +109,182 @@ class _AdminBusinessEditScreenState extends State<AdminBusinessEditScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading)
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F9FF),
+        body: Center(child: CircularProgressIndicator(color: _primaryBlue)),
+      );
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Editar mi Negocio")),
+      backgroundColor: const Color(0xFFF5F9FF),
+      appBar: AppBar(
+        title: Text(
+          "Editar mi Negocio",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: IconThemeData(color: _primaryBlue),
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // PORTADA
             GestureDetector(
               onTap: () => _pickImage(true),
-              child: Container(
-                height: 150,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(12),
-                  image: _nuevaPortada != null
-                      ? DecorationImage(
-                          image: FileImage(_nuevaPortada!),
-                          fit: BoxFit.cover,
-                        )
-                      : (_portadaUrl != null
-                            ? DecorationImage(
-                                image: NetworkImage(_portadaUrl!),
-                                fit: BoxFit.cover,
-                              )
-                            : null),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.camera_alt,
-                    color: Colors.white.withOpacity(0.8),
-                    size: 40,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    height: 180,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(20),
+                      image: _nuevaPortada != null
+                          ? DecorationImage(
+                              image: FileImage(_nuevaPortada!),
+                              fit: BoxFit.cover,
+                            )
+                          : (_portadaUrl != null
+                                ? DecorationImage(
+                                    image: NetworkImage(_portadaUrl!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black38,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(Icons.camera_alt, color: Colors.white),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 10),
-            const Center(
-              child: Text(
-                "Toque arriba para cambiar Portada",
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
+            const Text(
+              "Portada del Negocio",
+              style: TextStyle(color: Colors.grey),
             ),
+
             const SizedBox(height: 20),
 
             // LOGO
-            Center(
-              child: GestureDetector(
-                onTap: () => _pickImage(false),
-                child: CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.blue[100],
-                  backgroundImage: _nuevoLogo != null
-                      ? FileImage(_nuevoLogo!)
-                      : (_logoUrl != null
-                            ? NetworkImage(_logoUrl!) as ImageProvider
-                            : null),
-                  child: (_nuevoLogo == null && _logoUrl == null)
-                      ? const Icon(Icons.store, size: 40)
-                      : null,
-                ),
+            GestureDetector(
+              onTap: () => _pickImage(false),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.white,
+                    backgroundImage: _nuevoLogo != null
+                        ? FileImage(_nuevoLogo!)
+                        : (_logoUrl != null
+                              ? NetworkImage(_logoUrl!) as ImageProvider
+                              : null),
+                    child: (_nuevoLogo == null && _logoUrl == null)
+                        ? Icon(Icons.store, size: 40, color: _primaryBlue)
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: _primaryBlue,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.edit,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 10),
-            const Center(
-              child: Text(
-                "Toque para cambiar Logo",
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ),
-
             const SizedBox(height: 30),
-            TextField(
-              controller: _nombreCtrl,
-              decoration: const InputDecoration(
-                labelText: "Nombre del Negocio",
-                border: OutlineInputBorder(),
+
+            // INPUTS
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
               ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _descCtrl,
-              decoration: const InputDecoration(
-                labelText: "Descripción",
-                border: OutlineInputBorder(),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _nombreCtrl,
+                    decoration: InputDecoration(
+                      labelText: "Nombre Comercial",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _descCtrl,
+                    decoration: InputDecoration(
+                      labelText: "Descripción",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _telCtrl,
+                    decoration: InputDecoration(
+                      labelText: "Teléfono Público",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                ],
               ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _telCtrl,
-              decoration: const InputDecoration(
-                labelText: "Teléfono Público",
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.phone,
             ),
 
             const SizedBox(height: 30),
             SizedBox(
               width: double.infinity,
+              height: 55,
               child: ElevatedButton(
                 onPressed: _guardar,
-                child: const Text("GUARDAR CAMBIOS"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+                child: const Text(
+                  "GUARDAR CAMBIOS",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ],

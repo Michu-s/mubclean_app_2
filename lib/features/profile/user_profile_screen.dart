@@ -15,14 +15,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   final _supabase = Supabase.instance.client;
   bool _isLoading = false;
 
-  // Datos del perfil
   Perfil? _perfil;
   final _nombreCtrl = TextEditingController();
   final _telefonoCtrl = TextEditingController();
 
-  // Para la foto
   File? _imagenNueva;
   String? _avatarUrlActual;
+
+  final Color _primaryBlue = const Color(0xFF1565C0);
 
   @override
   void initState() {
@@ -40,13 +40,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           .select()
           .eq('id', userId)
           .single();
-
       _perfil = Perfil.fromJson(data);
 
       if (mounted) {
         setState(() {
           _nombreCtrl.text = _perfil!.nombreCompleto;
-          // Asumimos que agregamos el campo 'telefono' al modelo Perfil, si no está, lo manejamos manual
           _telefonoCtrl.text = data['telefono'] ?? '';
           _avatarUrlActual = _perfil!.fotoUrl;
           _isLoading = false;
@@ -54,7 +52,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
-      debugPrint("Error perfil: $e");
     }
   }
 
@@ -62,7 +59,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 50,
+      imageQuality: 60,
     );
     if (picked != null) {
       setState(() => _imagenNueva = File(picked.path));
@@ -83,12 +80,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     try {
       String? avatarUrlFinal = _avatarUrlActual;
 
-      // 1. Si hay imagen nueva, subirla
       if (_imagenNueva != null) {
         final fileExt = _imagenNueva!.path.split('.').last;
         final fileName =
             '$userId-${DateTime.now().millisecondsSinceEpoch}.$fileExt';
-
         await _supabase.storage
             .from('avatars')
             .upload(
@@ -101,7 +96,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             .getPublicUrl(fileName);
       }
 
-      // 2. Actualizar datos en BD
       await _supabase
           .from('perfiles')
           .update({
@@ -116,7 +110,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           const SnackBar(content: Text("Perfil actualizado correctamente")),
         );
         setState(() => _isLoading = false);
-        Navigator.pop(context); // Volver
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
@@ -131,115 +125,256 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Mi Perfil")),
+      backgroundColor: const Color(0xFFF5F9FF),
+      appBar: AppBar(
+        title: Text(
+          "Mi Perfil",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: IconThemeData(color: _primaryBlue),
+        centerTitle: true,
+      ),
       body: _isLoading && _perfil == null
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _primaryBlue))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
+                  const SizedBox(height: 20),
                   // --- AVATAR ---
                   GestureDetector(
                     onTap: _seleccionarFoto,
-                    child: Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundColor: Colors.grey[200],
-                          backgroundImage: _imagenNueva != null
-                              ? FileImage(_imagenNueva!)
-                              : (_avatarUrlActual != null
-                                    ? NetworkImage(_avatarUrlActual!)
-                                          as ImageProvider
-                                    : null),
-                          child:
-                              (_imagenNueva == null && _avatarUrlActual == null)
-                              ? const Icon(
-                                  Icons.person,
-                                  size: 60,
-                                  color: Colors.grey,
-                                )
-                              : null,
-                        ),
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
+                    child: Center(
+                      child: Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 60,
+                              backgroundColor: Colors.grey[200],
+                              backgroundImage: _imagenNueva != null
+                                  ? FileImage(_imagenNueva!)
+                                  : (_avatarUrlActual != null
+                                        ? NetworkImage(_avatarUrlActual!)
+                                              as ImageProvider
+                                        : null),
+                              child:
+                                  (_imagenNueva == null &&
+                                      _avatarUrlActual == null)
+                                  ? Icon(
+                                      Icons.person,
+                                      size: 60,
+                                      color: Colors.grey[400],
+                                    )
+                                  : null,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 20,
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: _primaryBlue,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+
+                  // --- TARJETA DE DATOS ---
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blue.withOpacity(0.05),
+                          blurRadius: 20,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Información Personal",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        TextField(
+                          controller: _nombreCtrl,
+                          decoration: InputDecoration(
+                            labelText: "Nombre Completo",
+                            prefixIcon: Icon(
+                              Icons.person_outline,
+                              color: _primaryBlue,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade200,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        TextField(
+                          controller: _telefonoCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            labelText: "Teléfono",
+                            prefixIcon: Icon(
+                              Icons.phone_outlined,
+                              color: _primaryBlue,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade200,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Solo lectura
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5F9FF),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.email_outlined,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Correo Electrónico",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    Text(
+                                      _perfil?.email ?? '',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5F9FF),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.badge_outlined,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Rol",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    Text(
+                                      _perfil?.rol.toUpperCase() ?? '',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: _primaryBlue,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
+
                   const SizedBox(height: 30),
-
-                  // --- DATOS ---
-                  TextField(
-                    controller: _nombreCtrl,
-                    decoration: const InputDecoration(
-                      labelText: "Nombre Completo",
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _telefonoCtrl,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: "Teléfono",
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.phone_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Solo lectura
-                  InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: "Correo Electrónico",
-                      border: OutlineInputBorder(),
-                      filled: true,
-                      fillColor: Color(0xFFF0F0F0),
-                    ),
-                    child: Text(
-                      _perfil?.email ?? '',
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: "Rol en el sistema",
-                      border: OutlineInputBorder(),
-                      filled: true,
-                      fillColor: Color(0xFFF0F0F0),
-                    ),
-                    child: Text(
-                      _perfil?.rol.toUpperCase() ?? '',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 40),
 
                   SizedBox(
                     width: double.infinity,
+                    height: 55,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _guardarCambios,
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.blue[800],
+                        backgroundColor: _primaryBlue,
                         foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        elevation: 5,
+                        shadowColor: _primaryBlue.withOpacity(0.3),
                       ),
                       child: _isLoading
                           ? const SizedBox(
@@ -247,9 +382,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               width: 20,
                               child: CircularProgressIndicator(
                                 color: Colors.white,
+                                strokeWidth: 2,
                               ),
                             )
-                          : const Text("GUARDAR CAMBIOS"),
+                          : const Text(
+                              "GUARDAR CAMBIOS",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ],

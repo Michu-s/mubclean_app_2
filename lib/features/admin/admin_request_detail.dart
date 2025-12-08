@@ -15,26 +15,24 @@ class AdminRequestDetail extends StatefulWidget {
 class _AdminRequestDetailState extends State<AdminRequestDetail> {
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
-
-  // Datos
-  late Solicitud _solicitudActual; // Usamos esto para tener datos frescos
+  late Solicitud _solicitudActual;
   List<Map<String, dynamic>> _items = [];
   List<dynamic> _empleados = [];
   Map<String, dynamic>? _evidenciaFinal;
 
-  // Controladores Cotización
   final Map<String, TextEditingController> _preciosControllers = {};
   double _totalCalculado = 0.0;
 
-  // Controladores Agenda
   String? _empleadoSeleccionadoId;
   DateTime? _fechaAgenda;
   TimeOfDay? _horaAgenda;
 
+  final Color _bluePrimary = const Color(0xFF1565C0);
+
   @override
   void initState() {
     super.initState();
-    _solicitudActual = widget.solicitud; // Inicializar con lo que viene
+    _solicitudActual = widget.solicitud;
     _fechaAgenda = widget.solicitud.fechaSolicitada;
     _horaAgenda = const TimeOfDay(hour: 9, minute: 0);
     _fetchCompleteDetails();
@@ -42,27 +40,21 @@ class _AdminRequestDetailState extends State<AdminRequestDetail> {
 
   Future<void> _fetchCompleteDetails() async {
     try {
-      debugPrint("🔍 Actualizando detalles...");
-
-      // 1. REFRESCAR LA SOLICITUD (Para ver si el cliente ya aceptó)
       final solicitudFresca = await _supabase
           .from('solicitudes')
           .select()
           .eq('id', widget.solicitud.id)
           .single();
-
-      // 2. Cargar Items + Fotos
       final itemsRes = await _supabase
           .from('items_solicitud')
           .select('*, servicios_catalogo(nombre), fotos_solicitud(foto_url)')
           .eq('solicitud_id', widget.solicitud.id);
 
-      // 3. Cargar Empleados (Solo si el estado FRESCO es 'aceptada')
-      // Convertimos el estado de texto a Enum para comparar
       final estadoFresco = EstadoSolicitud.values.firstWhere(
         (e) => e.name == solicitudFresca['estado'],
       );
 
+      // Cargar empleados si el estado es 'aceptada'
       if (estadoFresco == EstadoSolicitud.aceptada) {
         final empsRes = await _supabase
             .from('empleados_negocio')
@@ -72,7 +64,7 @@ class _AdminRequestDetailState extends State<AdminRequestDetail> {
         _empleados = empsRes as List<dynamic>;
       }
 
-      // 4. Cargar Evidencia
+      // Cargar evidencia si el estado es 'completada'
       if (estadoFresco == EstadoSolicitud.completada) {
         final eviRes = await _supabase
             .from('evidencia_final')
@@ -84,11 +76,8 @@ class _AdminRequestDetailState extends State<AdminRequestDetail> {
 
       if (mounted) {
         setState(() {
-          _solicitudActual = Solicitud.fromJson(
-            solicitudFresca,
-          ); // Actualizamos la UI
+          _solicitudActual = Solicitud.fromJson(solicitudFresca);
           _items = List<Map<String, dynamic>>.from(itemsRes);
-
           for (var item in _items) {
             final precio = item['precio_unitario'] ?? 0;
             _preciosControllers[item['id']] = TextEditingController(
@@ -100,7 +89,6 @@ class _AdminRequestDetailState extends State<AdminRequestDetail> {
         });
       }
     } catch (e) {
-      debugPrint("❌ ERROR CARGANDO DETALLES: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -113,16 +101,8 @@ class _AdminRequestDetailState extends State<AdminRequestDetail> {
     setState(() => _totalCalculado = suma);
   }
 
-  // --- ACCIONES ---
-
-  // 1. Enviar Cotización
   Future<void> _enviarCotizacion() async {
-    if (_totalCalculado <= 0) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("El total no puede ser 0")));
-      return;
-    }
+    if (_totalCalculado <= 0) return;
     setState(() => _isLoading = true);
     try {
       for (var itemId in _preciosControllers.keys) {
@@ -136,10 +116,7 @@ class _AdminRequestDetailState extends State<AdminRequestDetail> {
           .from('solicitudes')
           .update({'precio_total': _totalCalculado, 'estado': 'cotizada'})
           .eq('id', widget.solicitud.id);
-
-      // Recargar para reflejar cambio de estado
       await _fetchCompleteDetails();
-
       if (mounted)
         ScaffoldMessenger.of(
           context,
@@ -149,17 +126,8 @@ class _AdminRequestDetailState extends State<AdminRequestDetail> {
     }
   }
 
-  // 2. Agendar Cita
   Future<void> _agendarCita() async {
-    if (_empleadoSeleccionadoId == null ||
-        _fechaAgenda == null ||
-        _horaAgenda == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Selecciona técnico, fecha y hora")),
-      );
-      return;
-    }
-
+    if (_empleadoSeleccionadoId == null) return;
     setState(() => _isLoading = true);
     try {
       await _supabase
@@ -174,373 +142,498 @@ class _AdminRequestDetailState extends State<AdminRequestDetail> {
             'estado': 'agendada',
           })
           .eq('id', widget.solicitud.id);
-
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("¡Cita Agendada y Técnico Notificado!")),
-      );
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      debugPrint("Error agendando: $e");
       if (mounted) setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
-  // Helper para seleccionar Fecha/Hora
-  Future<void> _seleccionarFechaHora() async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: _fechaAgenda ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 60)),
-    );
-    if (date != null && mounted) {
-      final time = await showTimePicker(
-        context: context,
-        initialTime: _horaAgenda ?? TimeOfDay.now(),
-      );
-      if (time != null) {
-        setState(() {
-          _fechaAgenda = date;
-          _horaAgenda = time;
-        });
-      }
-    }
-  }
-
-  // --- UI ---
   @override
   Widget build(BuildContext context) {
-    // IMPORTANTE: Usamos _solicitudActual en lugar de widget.solicitud
     final estado = _solicitudActual.estado;
     final esModoCotizar = estado == EstadoSolicitud.pendiente;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F9FF),
       appBar: AppBar(
-        title: Text("Gestión #${_solicitudActual.id.substring(0, 4)}"),
+        title: Text(
+          "Gestión #${_solicitudActual.id.substring(0, 4)}",
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchCompleteDetails,
-            tooltip: "Actualizar estado",
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _bluePrimary))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Info del Estado
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      "Estado: ${estado.name.toUpperCase()}",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Info Dirección
-                  const Text(
-                    "📍 Dirección",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  Text(
-                    _solicitudActual.direccion,
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  const Divider(),
-
-                  // ITEMS Y COTIZACIÓN
-                  const Text(
-                    "Muebles a Cotizar",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  const SizedBox(height: 10),
-
-                  ..._items.map((item) {
-                    final fotos =
-                        item['fotos_solicitud'] as List<dynamic>? ?? [];
-                    final controller = _preciosControllers[item['id']];
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "${item['cantidad']}x ${item['servicios_catalogo']['nombre']}",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            if (item['descripcion_item'] != null)
-                              Text(
-                                item['descripcion_item'],
-                                style: TextStyle(color: Colors.grey[700]),
-                              ),
-
-                            const SizedBox(height: 10),
-
-                            // Visor de Fotos
-                            if (fotos.isNotEmpty)
-                              SizedBox(
-                                height: 100,
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: fotos.length,
-                                  itemBuilder: (ctx, i) {
-                                    final url = fotos[i]['foto_url'];
-                                    return GestureDetector(
-                                      onTap: () => showDialog(
-                                        context: context,
-                                        builder: (_) =>
-                                            Dialog(child: Image.network(url)),
-                                      ),
-                                      child: Container(
-                                        width: 100,
-                                        margin: const EdgeInsets.only(right: 8),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.grey.shade300,
-                                          ),
-                                          image: DecorationImage(
-                                            image: NetworkImage(url),
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              )
-                            else
-                              const Text(
-                                "Sin fotos",
-                                style: TextStyle(color: Colors.grey),
-                              ),
-
-                            const SizedBox(height: 10),
-
-                            // Campo de Precio
-                            if (esModoCotizar)
-                              TextField(
-                                controller: controller,
-                                keyboardType: TextInputType.number,
-                                onChanged: (_) => _calcularTotal(),
-                                decoration: const InputDecoration(
-                                  prefixText: "\$ ",
-                                  labelText: "Precio Unitario",
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                              )
-                            else
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Text(
-                                  "\$${item['precio_unitario']}",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-
-                  // TOTAL
-                  const Divider(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "TOTAL:",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      Text(
-                        "\$${_totalCalculado.toStringAsFixed(2)}",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 24,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ],
-                  ),
+                  _buildStatusHeader(estado),
                   const SizedBox(height: 20),
 
-                  // --- BOTONES DE ACCIÓN ---
-
-                  // 1. COTIZAR (Si está pendiente)
-                  if (esModoCotizar)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _enviarCotizacion,
-                        child: const Text("ENVIAR COTIZACIÓN"),
-                      ),
-                    ),
-
-                  // 2. MENSAJE DE ESPERA (Si ya cotizó pero cliente no ha aceptado)
-                  if (estado == EstadoSolicitud.cotizada)
+                  // --- SECCIÓN DE EVIDENCIA (Solo si completada) ---
+                  if (estado == EstadoSolicitud.completada &&
+                      _evidenciaFinal != null) ...[
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      color: Colors.orange[100],
-                      child: const Text(
-                        "⏳ Esperando que el cliente acepte la oferta...",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.brown,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.green.withOpacity(0.3),
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.green.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                    ),
-
-                  // 3. AGENDAR (Si fue aceptada)
-                  if (estado == EstadoSolicitud.aceptada) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      color: Colors.green[100],
-                      child: const Text(
-                        "✅ ¡El cliente aceptó! Procede a agendar.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "🗓️ Agendar Servicio",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // A. Selector Fecha/Hora
-                    InkWell(
-                      onTap: _seleccionarFechaHora,
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: "Fecha y Hora de la Cita",
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.calendar_month),
-                        ),
-                        child: Text(
-                          _fechaAgenda == null
-                              ? "Seleccionar..."
-                              : "${DateFormat('dd/MM/yyyy').format(_fechaAgenda!)} a las ${_horaAgenda!.format(context)}",
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-
-                    // B. Selector Técnico
-                    if (_empleados.isEmpty)
-                      const Text(
-                        "⚠️ No tienes técnicos. Ve a 'Mi Equipo' para agregar uno.",
-                        style: TextStyle(color: Colors.red),
-                      )
-                    else
-                      DropdownButtonFormField<String>(
-                        decoration: const InputDecoration(
-                          labelText: "Asignar Técnico",
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.person),
-                        ),
-                        value: _empleadoSeleccionadoId,
-                        items: _empleados
-                            .map(
-                              (emp) => DropdownMenuItem(
-                                value: emp['id'].toString(),
-                                child: Text(
-                                  emp['perfiles']['nombre_completo'] ??
-                                      "Sin Nombre",
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.green),
+                              SizedBox(width: 10),
+                              Text(
+                                "Resultado del Servicio",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Colors.green,
                                 ),
                               ),
-                            )
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => _empleadoSeleccionadoId = val),
-                      ),
-
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _agendarCita,
-                        icon: const Icon(Icons.check_circle),
-                        label: const Text("CONFIRMAR CITA Y ASIGNAR"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
+                            ],
+                          ),
+                          const Divider(height: 25),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              _evidenciaFinal!['foto_url'],
+                              height: 220,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (ctx, child, progress) =>
+                                  progress == null
+                                  ? child
+                                  : Container(
+                                      height: 220,
+                                      color: Colors.grey[100],
+                                      child: const Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          if (_evidenciaFinal!['comentario_tecnico'] != null &&
+                              _evidenciaFinal!['comentario_tecnico']
+                                  .toString()
+                                  .isNotEmpty) ...[
+                            const SizedBox(height: 15),
+                            const Text(
+                              "Notas del Técnico:",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _evidenciaFinal!['comentario_tecnico'],
+                                style: TextStyle(
+                                  color: Colors.grey[800],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 25),
                   ],
 
-                  // 4. VER RESULTADO (Si ya terminó)
-                  if (estado == EstadoSolicitud.completada &&
-                      _evidenciaFinal != null)
-                    Column(
-                      children: [
-                        const Text(
-                          "📸 Trabajo Terminado",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            _evidenciaFinal!['foto_url'],
-                            height: 250,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ],
-                    ),
+                  _buildSectionTitle("Detalles del Cliente"),
+                  const SizedBox(height: 10),
+                  _buildInfoCard(Icons.location_on, _solicitudActual.direccion),
+                  const SizedBox(height: 25),
+                  _buildSectionTitle("Muebles & Cotización"),
+                  const SizedBox(height: 10),
+                  ..._items.map((item) => _buildItemCard(item, esModoCotizar)),
+                  const SizedBox(height: 20),
+                  _buildTotalFooter(),
+                  const SizedBox(height: 30),
+                  _buildActionButtons(estado, esModoCotizar),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
     );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: TextStyle(
+        color: Colors.grey[700],
+        fontWeight: FontWeight.bold,
+        fontSize: 14,
+        letterSpacing: 1,
+      ),
+    );
+  }
+
+  Widget _buildStatusHeader(EstadoSolicitud estado) {
+    Color color = Colors.grey;
+    IconData icon = Icons.info_outline;
+
+    switch (estado) {
+      case EstadoSolicitud.pendiente:
+        color = Colors.orange;
+        icon = Icons.notifications_active;
+        break;
+      case EstadoSolicitud.cotizada:
+        color = _bluePrimary;
+        icon = Icons.attach_money;
+        break;
+      case EstadoSolicitud.aceptada:
+        color = Colors.teal;
+        icon = Icons.check_circle_outline;
+        break;
+      case EstadoSolicitud.agendada:
+        color = Colors.green;
+        icon = Icons.event;
+        break;
+      case EstadoSolicitud.en_proceso:
+        color = Colors.purple;
+        icon = Icons.cleaning_services;
+        break;
+      case EstadoSolicitud.completada:
+        color = Colors.grey;
+        icon = Icons.task_alt;
+        break;
+      default:
+        break;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 10),
+          Text(
+            estado.name.toUpperCase(),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: _bluePrimary, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 15, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemCard(Map<String, dynamic> item, bool esModoCotizar) {
+    final fotos = item['fotos_solicitud'] as List<dynamic>? ?? [];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: _bluePrimary.withOpacity(0.1),
+                child: Text(
+                  "${item['cantidad']}",
+                  style: TextStyle(
+                    color: _bluePrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['servicios_catalogo']['nombre'],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (item['descripcion_item'] != null)
+                      Text(
+                        item['descripcion_item'],
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (fotos.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 80,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: fotos.length,
+                itemBuilder: (ctx, i) => GestureDetector(
+                  onTap: () => showDialog(
+                    context: context,
+                    builder: (_) =>
+                        Dialog(child: Image.network(fotos[i]['foto_url'])),
+                  ),
+                  child: Container(
+                    width: 80,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      image: DecorationImage(
+                        image: NetworkImage(fotos[i]['foto_url']),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          if (esModoCotizar)
+            TextField(
+              controller: _preciosControllers[item['id']],
+              keyboardType: TextInputType.number,
+              onChanged: (_) => _calcularTotal(),
+              decoration: const InputDecoration(
+                prefixText: "\$ ",
+                labelText: "Precio Unitario",
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            )
+          else
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                "\$${item['precio_unitario']}",
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Colors.green,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalFooter() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _bluePrimary,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            "TOTAL ESTIMADO",
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            "\$${_totalCalculado.toStringAsFixed(2)}",
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 24,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(EstadoSolicitud estado, bool esModoCotizar) {
+    if (esModoCotizar) {
+      return SizedBox(
+        width: double.infinity,
+        height: 55,
+        child: ElevatedButton(
+          onPressed: _enviarCotizacion,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: const Text(
+            "ENVIAR COTIZACIÓN",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+    }
+
+    if (estado == EstadoSolicitud.aceptada) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            "🗓️ Configurar Cita",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 10),
+          ListTile(
+            title: Text(
+              _fechaAgenda == null
+                  ? "Seleccionar Fecha"
+                  : "${DateFormat('dd/MM/yyyy').format(_fechaAgenda!)} - ${_horaAgenda!.format(context)}",
+            ),
+            leading: const Icon(Icons.calendar_today),
+            tileColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: Colors.grey.shade300),
+            ),
+            onTap: () async {
+              final date = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now(),
+                firstDate: DateTime.now(),
+                lastDate: DateTime(2025),
+              );
+              if (date != null && mounted) {
+                final time = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.now(),
+                );
+                if (time != null)
+                  setState(() {
+                    _fechaAgenda = date;
+                    _horaAgenda = time;
+                  });
+              }
+            },
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            hint: const Text("Seleccionar Técnico"),
+            value: _empleadoSeleccionadoId,
+            items: _empleados.map((e) {
+              final nombre = e['perfiles'] != null
+                  ? e['perfiles']['nombre_completo']
+                  : "Sin Nombre";
+              return DropdownMenuItem(
+                value: e['id'].toString(),
+                child: Text(nombre),
+              );
+            }).toList(),
+            onChanged: (v) => setState(() => _empleadoSeleccionadoId = v),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 55,
+            child: ElevatedButton(
+              onPressed: _agendarCita,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _bluePrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                "CONFIRMAR CITA",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return const SizedBox.shrink();
   }
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mubclean_marketplace/features/admin/admin_employees_screens.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -7,9 +6,9 @@ import '../../shared/services/auth_service.dart';
 import '../../shared/models/marketplace_models.dart';
 import 'admin_request_detail.dart';
 import 'admin_services_screen.dart';
-import './admin_business_edit_screen.dart';
-import 'admin_business_edit_screen.dart'; // <--- Importante
-import '../profile/user_profile_screen.dart'; // <--- Importante
+import './admin_employees_screens.dart';
+import 'admin_business_edit_screen.dart';
+import '../profile/user_profile_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -33,6 +32,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   final _nombreNegocioCtrl = TextEditingController();
   final _descNegocioCtrl = TextEditingController();
+
+  // Colores de Diseño
+  final Color _primaryBlue = const Color(0xFF1565C0);
+  final Color _bgLight = const Color(0xFFF5F9FF);
 
   @override
   void initState() {
@@ -72,7 +75,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         }
       }
     } on PostgrestException catch (pgError) {
-      debugPrint("Error Supabase: ${pgError.message}");
       if (mounted)
         setState(() {
           _isLoading = false;
@@ -81,7 +83,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           }
         });
     } catch (e) {
-      debugPrint("Error genérico: $e");
       if (mounted)
         setState(() {
           _isLoading = false;
@@ -130,7 +131,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         });
       }
     } catch (e) {
-      debugPrint("Error solicitudes: $e");
       if (mounted)
         setState(() {
           _isLoading = false;
@@ -169,14 +169,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
     if (_errorMessage != null) {
       return Scaffold(
+        backgroundColor: _bgLight,
         appBar: AppBar(
           title: const Text("Error"),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () => auth.signOut(),
-            ),
-          ],
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.red,
         ),
         body: Center(
           child: Text(
@@ -189,72 +186,99 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
     if (!_isLoading && !_tieneNegocio) {
       return Scaffold(
+        backgroundColor: _bgLight,
         appBar: AppBar(
           title: const Text("Bienvenido Socio"),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () => auth.signOut(),
-            ),
-          ],
+          centerTitle: true,
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.store, size: 80, color: Colors.blue),
-              const SizedBox(height: 20),
-              const Text(
-                "¡Casi listo!",
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const Text(
-                "Registra tu empresa para empezar a recibir pedidos.",
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 30),
-              TextField(
-                controller: _nombreNegocioCtrl,
-                decoration: const InputDecoration(
-                  labelText: "Nombre del Negocio",
-                  border: OutlineInputBorder(),
+        body: Center(
+          child: Container(
+            margin: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 20)],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.store_mall_directory, size: 80, color: _primaryBlue),
+                const SizedBox(height: 20),
+                const Text(
+                  "Registra tu Negocio",
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-              ),
-              const SizedBox(height: 15),
-              TextField(
-                controller: _descNegocioCtrl,
-                decoration: const InputDecoration(
-                  labelText: "Descripción breve",
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 10),
+                const Text(
+                  "Empieza a recibir pedidos hoy mismo.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
                 ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _crearNegocio,
-                  child: const Text("CREAR MI NEGOCIO"),
+                const SizedBox(height: 30),
+                TextField(
+                  controller: _nombreNegocioCtrl,
+                  decoration: InputDecoration(
+                    labelText: "Nombre Comercial",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 15),
+                TextField(
+                  controller: _descNegocioCtrl,
+                  decoration: InputDecoration(
+                    labelText: "Slogan o Descripción",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 30),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _crearNegocio,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryBlue,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      "CREAR NEGOCIO",
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
     return Scaffold(
+      backgroundColor: _bgLight,
       appBar: AppBar(
-        title: const Text("Panel de Control"),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        title: Text(
+          "Panel de Control",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        iconTheme: IconThemeData(color: _primaryBlue),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => _checkNegocioExistente(),
           ),
 
-          // GESTIÓN DE EQUIPO
           IconButton(
-            icon: const Icon(Icons.people),
+            icon: const Icon(Icons.people_alt_outlined),
             tooltip: "Mi Equipo",
             onPressed: () => Navigator.push(
               context,
@@ -262,35 +286,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ),
           ),
 
-          // GESTIÓN DE SERVICIOS
           IconButton(
-            icon: const Icon(Icons.list_alt),
-            tooltip: "Gestionar Servicios",
+            icon: const Icon(Icons.view_list_rounded),
+            tooltip: "Catálogo",
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const AdminServicesScreen()),
             ),
           ),
 
-          // MENÚ DE USUARIO (Perfil, Negocio, Salir)
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle),
             onSelected: (value) {
-              if (value == 'perfil') {
+              if (value == 'perfil')
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const UserProfileScreen()),
                 );
-              } else if (value == 'negocio') {
+              else if (value == 'negocio')
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => const AdminBusinessEditScreen(),
                   ),
                 );
-              } else if (value == 'salir') {
+              else if (value == 'salir')
                 auth.signOut();
-              }
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
@@ -326,48 +347,132 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          labelColor: _primaryBlue,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: _primaryBlue,
+          indicatorWeight: 3,
           tabs: [
-            Tab(text: "Nuevas (${_nuevas.length})"),
-            Tab(text: "Activas (${_activas.length})"),
-            Tab(text: "Historial"),
+            Tab(
+              child: Text(
+                "Nuevas (${_nuevas.length})",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            Tab(
+              child: Text(
+                "Activas (${_activas.length})",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const Tab(text: "Historial"),
           ],
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _primaryBlue))
           : TabBarView(
               controller: _tabController,
               children: [
-                _buildList(_nuevas, isNew: true),
-                _buildList(_activas),
-                _buildList(_historial),
+                _buildList(_nuevas, emptyMsg: "Sin solicitudes nuevas"),
+                _buildList(_activas, emptyMsg: "No hay trabajos en curso"),
+                _buildList(_historial, emptyMsg: "Historial vacío"),
               ],
             ),
     );
   }
 
-  Widget _buildList(List<Solicitud> list, {bool isNew = false}) {
-    if (list.isEmpty)
-      return const Center(child: Text("Sin actividad reciente"));
+  Widget _buildList(List<Solicitud> list, {required String emptyMsg}) {
+    if (list.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 60, color: Colors.grey[300]),
+            const SizedBox(height: 10),
+            Text(
+              emptyMsg,
+              style: TextStyle(color: Colors.grey[500], fontSize: 16),
+            ),
+          ],
+        ),
+      );
+    }
 
     return ListView.builder(
+      padding: const EdgeInsets.all(16),
       itemCount: list.length,
       itemBuilder: (ctx, i) {
         final s = list[i];
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: _getColorEstado(s.estado),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 12,
+            ),
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _getColorEstado(s.estado).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
               child: Icon(
                 _getIconEstado(s.estado),
-                color: Colors.white,
-                size: 20,
+                color: _getColorEstado(s.estado),
               ),
             ),
-            title: Text(s.direccion, maxLines: 1),
-            subtitle: Text("Estado: ${s.estado.name.toUpperCase()}"),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            title: Text(
+              s.direccion,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 6.0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _getColorEstado(s.estado).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      s.estado.name.toUpperCase(),
+                      style: TextStyle(
+                        color: _getColorEstado(s.estado),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    DateFormat('dd MMM').format(s.fechaSolicitada),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            trailing: const Icon(
+              Icons.arrow_forward_ios,
+              size: 14,
+              color: Colors.grey,
+            ),
             onTap: () async {
               await Navigator.push(
                 context,
@@ -390,6 +495,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       case EstadoSolicitud.cotizada:
         return Colors.blue;
       case EstadoSolicitud.aceptada:
+        return Colors.teal;
+      case EstadoSolicitud.agendada:
         return Colors.green;
       case EstadoSolicitud.en_proceso:
         return Colors.purple;
@@ -401,11 +508,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   IconData _getIconEstado(EstadoSolicitud e) {
     switch (e) {
       case EstadoSolicitud.pendiente:
-        return Icons.notification_important;
+        return Icons.notifications_active;
+      case EstadoSolicitud.cotizada:
+        return Icons.request_quote;
+      case EstadoSolicitud.aceptada:
+        return Icons.check_circle;
+      case EstadoSolicitud.agendada:
+        return Icons.event;
       case EstadoSolicitud.en_proceso:
         return Icons.cleaning_services;
       default:
-        return Icons.info;
+        return Icons.history;
     }
   }
 }

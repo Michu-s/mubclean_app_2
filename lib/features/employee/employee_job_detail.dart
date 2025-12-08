@@ -18,8 +18,15 @@ class _EmployeeJobDetailState extends State<EmployeeJobDetail> {
   final _supabase = Supabase.instance.client;
   List<dynamic> _items = [];
   bool _isLoading = true;
+
+  // Variables para cierre
   File? _fotoEvidencia;
   final _comentarioCtrl = TextEditingController();
+  bool _subiendo = false;
+
+  // Colores corporativos
+  final Color _primaryBlue = const Color(0xFF1565C0);
+  final Color _bgLight = const Color(0xFFF5F9FF);
 
   @override
   void initState() {
@@ -29,8 +36,6 @@ class _EmployeeJobDetailState extends State<EmployeeJobDetail> {
 
   Future<void> _fetchItems() async {
     try {
-      // Traemos items Y sus fotos para que el técnico sepa qué limpiar
-      // Nota: fotos_solicitud(foto_url) requiere que la relación esté bien definida en Supabase
       final res = await _supabase
           .from('items_solicitud')
           .select('*, servicios_catalogo(nombre), fotos_solicitud(foto_url)')
@@ -44,47 +49,31 @@ class _EmployeeJobDetailState extends State<EmployeeJobDetail> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
-      debugPrint("Error cargando items: $e");
     }
   }
 
   Future<void> _abrirMapa() async {
-    // Intenta abrir la búsqueda de la dirección
     final query = Uri.encodeComponent(widget.solicitud.direccion);
     final googleUrl = Uri.parse(
       "https://www.google.com/maps/search/?api=1&query=$query",
     );
-
-    // Fallback a Waze si es necesario, o abrir selector de apps
     try {
       await launchUrl(googleUrl, mode: LaunchMode.externalApplication);
     } catch (e) {
       if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("No se pudo abrir mapas")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No se pudo abrir el mapa")),
+        );
     }
   }
 
   Future<void> _iniciarTrabajo() async {
-    setState(() => _isLoading = true);
-    try {
-      await _supabase
-          .from('solicitudes')
-          .update({'estado': 'en_proceso'})
-          .eq('id', widget.solicitud.id);
-
-      if (!mounted) return;
-      // Recargar la pantalla actual o volver atrás para refrescar lista
-      Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error al iniciar: $e")));
-      }
-    }
+    setState(() => _subiendo = true);
+    await _supabase
+        .from('solicitudes')
+        .update({'estado': 'en_proceso'})
+        .eq('id', widget.solicitud.id);
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _tomarFoto() async {
@@ -98,34 +87,66 @@ class _EmployeeJobDetailState extends State<EmployeeJobDetail> {
     }
   }
 
-  Future<void> _finalizarTrabajo() async {
+  Future<void> _confirmarFinalizar() async {
     if (_fotoEvidencia == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Foto obligatoria para terminar")),
+        const SnackBar(
+          content: Text(
+            "📸 FOTO OBLIGATORIA: Debes subir una foto del trabajo terminado.",
+          ),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
 
-    setState(() => _isLoading = true);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Finalizar Servicio"),
+        content: const Text(
+          "¿Confirmas que el trabajo está terminado y la evidencia es correcta?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancelar"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Cierra dialogo
+              _ejecutarFinalizacion(); // Ejecuta lógica
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text("Sí, Finalizar"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _ejecutarFinalizacion() async {
+    setState(() => _subiendo = true);
     try {
-      // 1. Subir Foto
+      // 1. Subir Foto al Bucket 'evidencias'
       final fileName =
-          'evidencia_${widget.solicitud.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          '${widget.solicitud.id}_end_${DateTime.now().millisecondsSinceEpoch}.jpg';
       await _supabase.storage
           .from('evidencias')
           .upload(fileName, _fotoEvidencia!);
-      final publicUrl = _supabase.storage
-          .from('evidencias')
-          .getPublicUrl(fileName);
+      final url = _supabase.storage.from('evidencias').getPublicUrl(fileName);
 
-      // 2. Guardar registro de evidencia
+      // 2. Guardar registro en tabla evidencia_final
       await _supabase.from('evidencia_final').insert({
         'solicitud_id': widget.solicitud.id,
-        'foto_url': publicUrl,
+        'foto_url': url,
         'comentario_tecnico': _comentarioCtrl.text,
       });
 
-      // 3. Cerrar solicitud
+      // 3. Actualizar estado de la solicitud a 'completada'
       await _supabase
           .from('solicitudes')
           .update({
@@ -135,17 +156,21 @@ class _EmployeeJobDetailState extends State<EmployeeJobDetail> {
           .eq('id', widget.solicitud.id);
 
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("¡Trabajo Terminado! 🏆")));
+        Navigator.pop(context); // Cierra la pantalla
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("¡Trabajo Completado! Cliente notificado. 🏆"),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
+      debugPrint("Error al finalizar: $e");
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _subiendo = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("Error al finalizar: $e")));
+        ).showSnackBar(SnackBar(content: Text("Error al guardar: $e")));
       }
     }
   }
@@ -155,294 +180,376 @@ class _EmployeeJobDetailState extends State<EmployeeJobDetail> {
     final iniciado = widget.solicitud.estado == EstadoSolicitud.en_proceso;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Hoja de Trabajo")),
+      backgroundColor: _bgLight,
+      appBar: AppBar(
+        title: Text(
+          "Hoja de Trabajo",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: IconThemeData(color: _primaryBlue),
+      ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _primaryBlue))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // --- TARJETA DE DIRECCIÓN ---
-                  Card(
-                    color: Colors.blue[50],
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 40,
-                            color: Colors.blue,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            widget.solicitud.direccion,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          ElevatedButton.icon(
-                            onPressed: _abrirMapa,
-                            icon: const Icon(Icons.map),
-                            label: const Text("ABRIR MAPA / WAZE"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.blue,
-                              elevation: 0,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // --- LISTA DE TAREAS ---
-                  const Text(
-                    "Lista de Muebles:",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  const SizedBox(height: 10),
-
-                  if (_items.isEmpty)
-                    const Text(
-                      "No se encontraron detalles de items.",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-
-                  ..._items.map((item) {
-                    // Extraemos las fotos de referencia del cliente
-                    final fotos =
-                        item['fotos_solicitud'] as List<dynamic>? ?? [];
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  child: Text(
-                                    "${item['cantidad']}",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    item['servicios_catalogo']['nombre'] ??
-                                        'Servicio',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (item['descripcion_item'] != null &&
-                                item['descripcion_item'].toString().isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: 5,
-                                  left: 50,
-                                ),
-                                child: Text(
-                                  item['descripcion_item'],
-                                  style: TextStyle(
-                                    color: Colors.grey[800],
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ),
-
-                            // --- FOTOS DE REFERENCIA (LO QUE SUBIÓ EL CLIENTE) ---
-                            if (fotos.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              const Text(
-                                "Referencia del cliente:",
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              SizedBox(
-                                height: 80,
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: fotos.length,
-                                  itemBuilder: (ctx, i) => GestureDetector(
-                                    onTap: () => showDialog(
-                                      context: context,
-                                      builder: (_) => Dialog(
-                                        child: Image.network(
-                                          fotos[i]['foto_url'],
-                                        ),
-                                      ),
-                                    ),
-                                    child: Container(
-                                      width: 80,
-                                      margin: const EdgeInsets.only(right: 8),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: Colors.grey.shade300,
-                                        ),
-                                        image: DecorationImage(
-                                          image: NetworkImage(
-                                            fotos[i]['foto_url'],
-                                          ),
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+                  // --- TARJETA DIRECCIÓN ---
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blue.withOpacity(0.05),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
                         ),
-                      ),
-                    );
-                  }),
-
-                  const Divider(height: 40),
-
-                  // --- ZONA DE ACCIÓN ---
-                  if (!iniciado)
-                    // Opción A: Aún no inicia -> Botón para iniciar
-                    SlideActionBtn(onSlide: _iniciarTrabajo)
-                  else
-                    // Opción B: Ya inició -> Formulario de Cierre
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      ],
+                    ),
+                    child: Column(
                       children: [
-                        const Text(
-                          "Finalizar Servicio",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
+                        const Icon(
+                          Icons.location_on,
+                          size: 40,
+                          color: Colors.redAccent,
                         ),
                         const SizedBox(height: 10),
-
-                        // Cámara
-                        GestureDetector(
-                          onTap: _tomarFoto,
-                          child: Container(
-                            height: 200,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              border: Border.all(color: Colors.grey),
-                              borderRadius: BorderRadius.circular(12),
-                              image: _fotoEvidencia != null
-                                  ? DecorationImage(
-                                      image: FileImage(_fotoEvidencia!),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
-                            ),
-                            child: _fotoEvidencia == null
-                                ? const Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.camera_alt,
-                                        size: 50,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(height: 10),
-                                      Text(
-                                        "Tocar para tomar foto de evidencia",
-                                        style: TextStyle(color: Colors.grey),
-                                      ),
-                                    ],
-                                  )
-                                : null,
+                        Text(
+                          widget.solicitud.direccion,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            height: 1.4,
                           ),
                         ),
                         const SizedBox(height: 15),
-
-                        // Comentario
-                        TextField(
-                          controller: _comentarioCtrl,
-                          decoration: const InputDecoration(
-                            labelText: "Notas del técnico (opcional)",
-                            border: OutlineInputBorder(),
-                            hintText:
-                                "Ej: Se limpió mancha difícil, cliente satisfecho.",
-                          ),
-                          maxLines: 2,
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Botón Final
                         SizedBox(
                           width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _finalizarTrabajo,
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text("TERMINAR Y SUBIR EVIDENCIA"),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.all(16),
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              textStyle: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                          child: OutlinedButton.icon(
+                            onPressed: _abrirMapa,
+                            icon: const Icon(Icons.map),
+                            label: const Text("ABRIR GPS"),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _primaryBlue,
+                              side: BorderSide(color: _primaryBlue),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
                               ),
                             ),
                           ),
                         ),
                       ],
                     ),
+                  ),
+                  const SizedBox(height: 25),
+
+                  // --- TÍTULO SECCIÓN ---
+                  Text(
+                    "📋 TAREAS A REALIZAR",
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // --- LISTA DE ITEMS ---
+                  if (_items.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          "Cargando detalles...",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+
+                  ..._items.map((item) {
+                    final fotos =
+                        item['fotos_solicitud'] as List<dynamic>? ?? [];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 15),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _primaryBlue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  "${item['cantidad']}x",
+                                  style: TextStyle(
+                                    color: _primaryBlue,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: Text(
+                                  item['servicios_catalogo']['nombre'],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (item['descripcion_item'] != null &&
+                              item['descripcion_item'].toString().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, left: 2),
+                              child: Text(
+                                "Nota: ${item['descripcion_item']}",
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontStyle: FontStyle.italic,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+
+                          // FOTOS CARRUSEL
+                          if (fotos.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: 70,
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: fotos.length,
+                                itemBuilder: (ctx, i) => GestureDetector(
+                                  onTap: () => showDialog(
+                                    context: context,
+                                    builder: (_) => Dialog(
+                                      child: Image.network(
+                                        fotos[i]['foto_url'],
+                                      ),
+                                    ),
+                                  ),
+                                  child: Container(
+                                    width: 70,
+                                    margin: const EdgeInsets.only(right: 10),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: Colors.grey.shade200,
+                                      ),
+                                      image: DecorationImage(
+                                        image: NetworkImage(
+                                          fotos[i]['foto_url'],
+                                        ),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }),
+
+                  const SizedBox(height: 30),
+
+                  // --- ZONA DE ACCIÓN (FOOTER) ---
+                  if (_subiendo)
+                    Center(
+                      child: Column(
+                        children: [
+                          CircularProgressIndicator(color: _primaryBlue),
+                          const SizedBox(height: 10),
+                          const Text("Guardando evidencia..."),
+                        ],
+                      ),
+                    )
+                  else if (!iniciado)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton.icon(
+                        onPressed: _iniciarTrabajo,
+                        icon: const Icon(Icons.play_circle_fill),
+                        label: const Text("LLEGUÉ AL DOMICILIO - INICIAR"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange[800],
+                          foregroundColor: Colors.white,
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.green.withOpacity(0.3),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.green.withOpacity(0.1),
+                            blurRadius: 20,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.timer, color: Colors.green),
+                              SizedBox(width: 8),
+                              Text(
+                                "Trabajo en curso",
+                                style: TextStyle(
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 30),
+                          const Text(
+                            "Evidencia Final",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+
+                          // CÁMARA
+                          GestureDetector(
+                            onTap: _tomarFoto,
+                            child: Container(
+                              height: 180,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(
+                                  color: Colors.grey.shade300,
+                                  style: BorderStyle.solid,
+                                ),
+                                image: _fotoEvidencia != null
+                                    ? DecorationImage(
+                                        image: FileImage(_fotoEvidencia!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: _fotoEvidencia == null
+                                  ? Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.camera_alt_outlined,
+                                          size: 40,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          "Tocar para foto",
+                                          style: TextStyle(
+                                            color: Colors.grey[500],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+
+                          // INPUT COMENTARIO
+                          TextField(
+                            controller: _comentarioCtrl,
+                            decoration: InputDecoration(
+                              hintText: "Comentarios finales...",
+                              filled: true,
+                              fillColor: Colors.grey[50],
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                            ),
+                            maxLines: 2,
+                          ),
+                          const SizedBox(height: 20),
+
+                          // BOTÓN FINALIZAR
+                          SizedBox(
+                            height: 55,
+                            child: ElevatedButton(
+                              onPressed:
+                                  _confirmarFinalizar, // Usamos la confirmación
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green[700],
+                                foregroundColor: Colors.white,
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text(
+                                "FINALIZAR SERVICIO",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
-    );
-  }
-}
-
-// Botón visual para iniciar
-class SlideActionBtn extends StatelessWidget {
-  final VoidCallback onSlide;
-  const SlideActionBtn({super.key, required this.onSlide});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: onSlide,
-        icon: const Icon(Icons.play_arrow),
-        label: const Text("LLEGUÉ AL DOMICILIO - INICIAR"),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.all(20),
-          backgroundColor: Colors.orange,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-      ),
     );
   }
 }

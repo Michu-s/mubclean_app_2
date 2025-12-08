@@ -13,6 +13,7 @@ class _AdminEmployeesScreenState extends State<AdminEmployeesScreen> {
   List<dynamic> _empleados = [];
   bool _isLoading = true;
   String? _negocioId;
+  final Color _primaryBlue = const Color(0xFF1565C0);
 
   @override
   void initState() {
@@ -23,42 +24,29 @@ class _AdminEmployeesScreenState extends State<AdminEmployeesScreen> {
   Future<void> _fetchEmpleados() async {
     setState(() => _isLoading = true);
     final userId = _supabase.auth.currentUser!.id;
-
     try {
-      // 1. Obtener ID del negocio
       final negocioRes = await _supabase
           .from('negocios')
           .select('id')
           .eq('owner_id', userId)
           .maybeSingle();
-
       if (negocioRes == null) {
-        debugPrint("⚠️ No se encontró negocio para este usuario.");
-        if (mounted) setState(() => _isLoading = false);
+        setState(() => _isLoading = false);
         return;
       }
       _negocioId = negocioRes['id'];
-
-      // 2. Obtener empleados vinculados
-      debugPrint("🔍 Buscando empleados para negocio: $_negocioId");
-
       final res = await _supabase
           .from('empleados_negocio')
           .select(
             'id, activo, perfiles(email, nombre_completo, foto_perfil_url)',
           )
           .eq('negocio_id', _negocioId!);
-
-      debugPrint("✅ Empleados encontrados: ${(res as List).length}");
-
-      if (mounted) {
+      if (mounted)
         setState(() {
           _empleados = res;
           _isLoading = false;
         });
-      }
     } catch (e) {
-      debugPrint("❌ Error fetching empleados: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -72,21 +60,27 @@ class _AdminEmployeesScreenState extends State<AdminEmployeesScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogSt) => AlertDialog(
-          title: const Text("Agregar Técnico"),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            "Agregar Técnico",
+            style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                "Ingresa el correo del usuario que deseas agregar a tu equipo.",
-              ),
-              const SizedBox(height: 10),
+              const Text("Ingresa el correo del usuario registrado."),
+              const SizedBox(height: 15),
               TextField(
                 controller: emailCtrl,
                 decoration: InputDecoration(
                   labelText: "Correo Electrónico",
                   errorText: searchError,
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.email),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.email_outlined),
                 ),
               ),
               if (searching)
@@ -107,66 +101,53 @@ class _AdminEmployeesScreenState extends State<AdminEmployeesScreen> {
                   : () async {
                       final email = emailCtrl.text.trim();
                       if (email.isEmpty) return;
-
                       setDialogSt(() {
                         searching = true;
                         searchError = null;
                       });
-
                       try {
-                        // 1. Buscar si el usuario existe en perfiles
                         final userRes = await _supabase
                             .from('perfiles')
                             .select('id, rol')
                             .eq('email', email)
                             .maybeSingle();
-
                         if (userRes == null) {
                           setDialogSt(() {
-                            searchError =
-                                "Usuario no encontrado. Debe registrarse primero en la app.";
+                            searchError = "Usuario no encontrado.";
                             searching = false;
                           });
                           return;
                         }
 
-                        // 2. Verificar si ya es empleado de este negocio
                         final existingEmp = await _supabase
                             .from('empleados_negocio')
                             .select()
                             .eq('negocio_id', _negocioId!)
                             .eq('perfil_id', userRes['id'])
                             .maybeSingle();
-
                         if (existingEmp != null) {
                           setDialogSt(() {
-                            searchError = "Este usuario ya está en tu equipo.";
+                            searchError = "Ya está en tu equipo.";
                             searching = false;
                           });
                           return;
                         }
 
-                        // 3. Vincular (Crear empleado)
                         await _supabase.from('empleados_negocio').insert({
                           'negocio_id': _negocioId,
                           'perfil_id': userRes['id'],
                           'activo': true,
                         });
-
-                        // 4. Actualizar rol del usuario a 'empleado' si era 'cliente'
-                        if (userRes['rol'] == 'cliente') {
+                        if (userRes['rol'] == 'cliente')
                           await _supabase
                               .from('perfiles')
                               .update({'rol': 'empleado'})
                               .eq('id', userRes['id']);
-                        }
 
                         if (mounted) {
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("¡Empleado agregado exitosamente!"),
-                            ),
+                            const SnackBar(content: Text("Empleado agregado")),
                           );
                           _fetchEmpleados();
                         }
@@ -177,6 +158,13 @@ class _AdminEmployeesScreenState extends State<AdminEmployeesScreen> {
                         });
                       }
                     },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
               child: const Text("Agregar"),
             ),
           ],
@@ -186,94 +174,77 @@ class _AdminEmployeesScreenState extends State<AdminEmployeesScreen> {
   }
 
   Future<void> _toggleStatus(String empId, bool actual) async {
-    try {
-      await _supabase
-          .from('empleados_negocio')
-          .update({'activo': !actual})
-          .eq('id', empId);
-      _fetchEmpleados();
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
-    }
+    await _supabase
+        .from('empleados_negocio')
+        .update({'activo': !actual})
+        .eq('id', empId);
+    _fetchEmpleados();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Mi Equipo de Técnicos")),
+      backgroundColor: const Color(0xFFF5F9FF),
+      appBar: AppBar(
+        title: Text(
+          "Mi Equipo",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: IconThemeData(color: _primaryBlue),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddEmployeeDialog,
+        backgroundColor: _primaryBlue,
         icon: const Icon(Icons.person_add),
         label: const Text("Nuevo"),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _primaryBlue))
           : _empleados.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.group_off, size: 60, color: Colors.grey),
-                  const SizedBox(height: 10),
-                  const Text("No tienes empleados aún."),
-                  const Text(
-                    "Agrega usuarios por su correo.",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: _fetchEmpleados,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text("Refrescar Lista"),
-                  ),
-                ],
-              ),
-            )
+          ? const Center(child: Text("No tienes empleados aún."))
           : ListView.builder(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(16),
               itemCount: _empleados.length,
               itemBuilder: (context, index) {
                 final emp = _empleados[index];
-                final perfil =
-                    emp['perfiles']; // Puede ser null si la política RLS falla
+                final perfil = emp['perfiles'];
                 final activo = emp['activo'] as bool;
-
-                // Manejo seguro de nulos
                 final nombre = perfil != null
                     ? perfil['nombre_completo']
-                    : "Usuario (Sin acceso al nombre)";
-                final email = perfil != null ? perfil['email'] : "Email oculto";
+                    : "Sin nombre";
+                final email = perfil != null ? perfil['email'] : "";
 
                 return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: ListTile(
+                    contentPadding: const EdgeInsets.all(16),
                     leading: CircleAvatar(
-                      backgroundColor: activo ? Colors.blue : Colors.grey,
+                      backgroundColor: activo ? _primaryBlue : Colors.grey,
+                      radius: 25,
                       child: Text(
                         nombre.isNotEmpty ? nombre[0].toUpperCase() : "?",
-                        style: const TextStyle(color: Colors.white),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     title: Text(
                       nombre,
                       style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                         decoration: activo ? null : TextDecoration.lineThrough,
+                        color: activo ? Colors.black : Colors.grey,
                       ),
                     ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(email),
-                        Text(
-                          activo ? "🟢 Activo" : "🔴 Inactivo",
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
+                    subtitle: Text(email),
                     trailing: Switch(
                       value: activo,
                       onChanged: (val) => _toggleStatus(emp['id'], activo),

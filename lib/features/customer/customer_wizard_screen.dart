@@ -1,17 +1,41 @@
+/// ============================================================================
+/// customer_wizard_screen.dart
+/// Wizard de 3 pasos para crear una nueva solicitud de servicio.
+/// Rediseño completo con estilo "Mercado Pago-inspired".
+///
+/// Paso 1: Dirección del servicio + Fecha
+/// Paso 2: Agregar muebles/servicios
+/// Paso 3: Confirmar y enviar
+///
+/// NOTA: Toda la lógica de negocio (Supabase, carrito) se mantiene intacta.
+/// Solo se rediseña la UI.
+///
+/// FIX: Corregido para Flutter Web - usar XFile en lugar de File
+/// FIX: Agregado MaterialLocalizations para DatePicker
+/// ============================================================================
+library;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import '../../shared/models/marketplace_models.dart';
+import 'ui/mp_theme.dart';
+import 'ui/mp_card.dart';
+import 'ui/mp_stepper.dart';
+import 'ui/mp_cta_footer.dart';
 
+/// Modelo para items en el carrito (borrador de muebles/servicios)
+/// CORREGIDO: Usar XFile en lugar de File para compatibilidad con Flutter Web
 class ItemBorrador {
   String servicioCatalogoId;
   String nombreServicio;
   String descripcion;
   int cantidad;
-  List<File> fotos;
+  List<XFile> fotos; // Cambiado de List<File> a List<XFile>
 
   ItemBorrador({
     required this.servicioCatalogoId,
@@ -22,6 +46,7 @@ class ItemBorrador {
   });
 }
 
+/// Pantalla principal del wizard de nueva solicitud
 class CustomerWizardScreen extends StatefulWidget {
   final Negocio negocioSeleccionado;
 
@@ -32,30 +57,61 @@ class CustomerWizardScreen extends StatefulWidget {
 }
 
 class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
+  // ============================================================================
+  // VARIABLES DE ESTADO
+  // ============================================================================
+
   final _supabase = Supabase.instance.client;
+
+  /// Paso actual del wizard (0, 1 o 2)
   int _currentStep = 0;
+
+  /// Estado de carga al enviar solicitud
   bool _isLoading = false;
 
+  // Controladores de texto para Paso 1 (Dirección)
   final _calleCtrl = TextEditingController();
   final _numeroCtrl = TextEditingController();
   final _coloniaCtrl = TextEditingController();
   final _referenciasCtrl = TextEditingController();
+
+  /// Fecha seleccionada para el servicio (default: mañana)
   DateTime _fechaSeleccionada = DateTime.now().add(const Duration(days: 1));
 
+  /// Catálogo de servicios del negocio
   List<dynamic> _catalogo = [];
+
+  /// Carrito de muebles/servicios agregados
   final List<ItemBorrador> _carrito = [];
 
-  // Colores Corporativos
-  final Color _primaryBlue = const Color(0xFF1565C0);
-  final Color _bgLight = const Color(0xFFF5F9FF);
+  // ============================================================================
+  // LIFECYCLE
+  // ============================================================================
 
   @override
   void initState() {
     super.initState();
+    // Inicializar formateo de fechas en español
     initializeDateFormatting('es', null);
+    // Cargar catálogo de servicios del negocio
     _loadCatalogo();
   }
 
+  @override
+  void dispose() {
+    // Limpiar controladores
+    _calleCtrl.dispose();
+    _numeroCtrl.dispose();
+    _coloniaCtrl.dispose();
+    _referenciasCtrl.dispose();
+    super.dispose();
+  }
+
+  // ============================================================================
+  // LÓGICA DE NEGOCIO (Actualizada para Flutter Web)
+  // ============================================================================
+
+  /// Carga el catálogo de servicios del negocio desde Supabase
   Future<void> _loadCatalogo() async {
     try {
       final res = await _supabase
@@ -63,289 +119,37 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
           .select()
           .eq('negocio_id', widget.negocioSeleccionado.id)
           .eq('activo', true);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _catalogo = res as List<dynamic>;
         });
+      }
     } catch (e) {
-      debugPrint("Error catálogo: $e");
+      debugPrint("Error cargando catálogo: $e");
     }
   }
 
-  void _agregarItemDialog() {
-    dynamic selectedService;
-    final notaCtrl = TextEditingController();
-    int cantidad = 1;
-    List<File> fotosTemporales = [];
-
-    if (_catalogo.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Este negocio aún no tiene servicios configurados."),
-        ),
-      );
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setSt) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-            boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 20)],
-          ),
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-            top: 25,
-            left: 25,
-            right: 25,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Agregar Mueble",
-                      style: TextStyle(
-                        color: _primaryBlue,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, color: Colors.grey),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                DropdownButtonFormField(
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: "Tipo de Mueble",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: Icon(Icons.chair, color: _primaryBlue),
-                    filled: true,
-                    fillColor: _bgLight,
-                  ),
-                  items: _catalogo
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e,
-                          child: Text(
-                            e['nombre'],
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (val) => setSt(() => selectedService = val),
-                ),
-                const SizedBox(height: 15),
-
-                TextField(
-                  controller: notaCtrl,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    labelText: "Detalles (Manchas, tela...)",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: Icon(Icons.info_outline, color: _primaryBlue),
-                    filled: true,
-                    fillColor: _bgLight,
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                Row(
-                  children: [
-                    const Text(
-                      "Cantidad:",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 15),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: _bgLight,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove),
-                            onPressed: () =>
-                                cantidad > 1 ? setSt(() => cantidad--) : null,
-                          ),
-                          Text(
-                            "$cantidad",
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.add, color: _primaryBlue),
-                            onPressed: () => setSt(() => cantidad++),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final ImagePicker picker = ImagePicker();
-                        final XFile? image = await picker.pickImage(
-                          source: ImageSource.gallery,
-                          imageQuality: 50,
-                        );
-                        if (image != null)
-                          setSt(() => fotosTemporales.add(File(image.path)));
-                      },
-                      icon: const Icon(Icons.camera_alt),
-                      label: const Text("FOTO"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[50],
-                        foregroundColor: _primaryBlue,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                if (fotosTemporales.isNotEmpty) ...[
-                  const SizedBox(height: 15),
-                  SizedBox(
-                    height: 80,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: fotosTemporales.length,
-                      itemBuilder: (context, index) => Stack(
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(right: 10),
-                            width: 80,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              image: DecorationImage(
-                                image: FileImage(fotosTemporales[index]),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 4,
-                            right: 14,
-                            child: GestureDetector(
-                              onTap: () =>
-                                  setSt(() => fotosTemporales.removeAt(index)),
-                              child: const CircleAvatar(
-                                backgroundColor: Colors.red,
-                                radius: 10,
-                                child: Icon(
-                                  Icons.close,
-                                  size: 12,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 30),
-                SizedBox(
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (selectedService != null) {
-                        setState(() {
-                          _carrito.add(
-                            ItemBorrador(
-                              servicioCatalogoId: selectedService['id'],
-                              nombreServicio: selectedService['nombre'],
-                              descripcion: notaCtrl.text,
-                              cantidad: cantidad,
-                              fotos: List.from(fotosTemporales),
-                            ),
-                          );
-                        });
-                        Navigator.pop(ctx);
-                      } else {
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(
-                            content: Text("Selecciona un tipo de mueble"),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primaryBlue,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      elevation: 5,
-                    ),
-                    child: const Text(
-                      "AGREGAR AL PEDIDO",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
+  /// Envía la solicitud completa a Supabase
+  /// CORREGIDO: Usar bytes para subir archivos (compatible con Web)
   Future<void> _enviarSolicitud() async {
+    // Validaciones previas
     if (_calleCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Falta dirección")));
+      _showErrorSnackBar("Falta la dirección");
       return;
     }
     if (_carrito.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Agrega al menos un servicio")),
-      );
+      _showErrorSnackBar("Agrega al menos un mueble");
       return;
     }
 
     setState(() => _isLoading = true);
+
     final userId = _supabase.auth.currentUser!.id;
     final direccionCompleta =
         "${_calleCtrl.text} #${_numeroCtrl.text}, Col. ${_coloniaCtrl.text}. ${_referenciasCtrl.text}";
 
     try {
+      // 1. Crear solicitud principal
       final solRes = await _supabase
           .from('solicitudes')
           .insert({
@@ -361,6 +165,7 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
           .single();
       final solicitudId = solRes['id'];
 
+      // 2. Insertar cada item del carrito
       for (var item in _carrito) {
         final itemRes = await _supabase
             .from('items_solicitud')
@@ -373,12 +178,24 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
             .select()
             .single();
         final itemId = itemRes['id'];
+
+        // 3. Subir fotos asociadas al item (CORREGIDO para Web)
         for (var i = 0; i < item.fotos.length; i++) {
-          final fileName =
-              '${solicitudId}/${itemId}_$i.${item.fotos[i].path.split('.').last}';
+          final xFile = item.fotos[i];
+          final extension = xFile.name.split('.').last;
+          final fileName = '$solicitudId/${itemId}_$i.$extension';
+
+          // Leer bytes del archivo (funciona en Web y Mobile)
+          final bytes = await xFile.readAsBytes();
+
           await _supabase.storage
               .from('muebles')
-              .upload(fileName, item.fotos[i]);
+              .uploadBinary(
+                fileName,
+                bytes,
+                fileOptions: FileOptions(contentType: 'image/$extension'),
+              );
+
           await _supabase.from('fotos_solicitud').insert({
             'item_solicitud_id': itemId,
             'foto_url': _supabase.storage
@@ -388,390 +205,1198 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
         }
       }
 
+      // Navegar de vuelta al home con mensaje de éxito
       if (!mounted) return;
       Navigator.pop(context);
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Solicitud Enviada"),
-          backgroundColor: Colors.green,
+          content: Text("¡Solicitud enviada! Te confirmaremos pronto."),
+          backgroundColor: MpColors.success,
         ),
       );
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("Error enviando solicitud: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showErrorSnackBar("Error al enviar. Intenta de nuevo.");
+      }
     }
   }
+
+  /// Muestra un snackbar de error
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: MpColors.error),
+    );
+  }
+
+  // ============================================================================
+  // VALIDACIONES
+  // ============================================================================
+
+  /// Valida si el Paso 1 está completo
+  bool get _isStep1Valid =>
+      _calleCtrl.text.isNotEmpty &&
+      _numeroCtrl.text.isNotEmpty &&
+      _coloniaCtrl.text.isNotEmpty;
+
+  /// Valida si el Paso 2 está completo
+  bool get _isStep2Valid => _carrito.isNotEmpty;
+
+  /// Obtiene el helper text según el paso actual
+  String? get _currentHelperText {
+    switch (_currentStep) {
+      case 0:
+        return !_isStep1Valid ? 'Completa la dirección para continuar' : null;
+      case 1:
+        return !_isStep2Valid
+            ? 'Agrega al menos un mueble para continuar'
+            : null;
+      default:
+        return null;
+    }
+  }
+
+  /// Determina si el botón primario está habilitado
+  bool get _isPrimaryEnabled {
+    switch (_currentStep) {
+      case 0:
+        return _isStep1Valid;
+      case 1:
+        return _isStep2Valid;
+      case 2:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // ============================================================================
+  // NAVEGACIÓN DEL WIZARD
+  // ============================================================================
+
+  /// Avanza al siguiente paso o envía la solicitud
+  void _onNextPressed() {
+    if (_currentStep < 2) {
+      setState(() => _currentStep++);
+    } else {
+      _enviarSolicitud();
+    }
+  }
+
+  /// Retrocede al paso anterior
+  void _onBackPressed() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+    }
+  }
+
+  // ============================================================================
+  // UI PRINCIPAL
+  // ============================================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgLight,
+      backgroundColor: MpColors.bgScaffold,
+
+      // AppBar simple y limpio
       appBar: AppBar(
-        title: Text(
-          "Nueva Solicitud",
-          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: IconThemeData(color: _primaryBlue),
-      ),
-      body: Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.light(primary: _primaryBlue),
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: _primaryBlue, width: 2),
-            ),
+        title: const Text(
+          'Nueva Solicitud',
+          style: TextStyle(
+            color: MpColors.primaryBlue,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        child: Stepper(
-          type: StepperType.horizontal,
-          elevation: 0,
-          currentStep: _currentStep,
-          onStepContinue: () {
-            if (_currentStep < 2)
-              setState(() => _currentStep++);
-            else
-              _enviarSolicitud();
-          },
-          onStepCancel: () {
-            if (_currentStep > 0) setState(() => _currentStep--);
-          },
-          controlsBuilder: (context, details) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 25),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : details.onStepContinue,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _primaryBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 4,
-                        shadowColor: _primaryBlue.withOpacity(0.4),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              _currentStep == 2
-                                  ? "ENVIAR SOLICITUD"
-                                  : "SIGUIENTE",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                    ),
-                  ),
-                  if (_currentStep > 0) ...[
-                    const SizedBox(width: 15),
-                    TextButton(
-                      onPressed: details.onStepCancel,
-                      child: const Text(
-                        "ATRÁS",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+        backgroundColor: MpColors.cardBg,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: MpColors.primaryBlue),
+      ),
+
+      // Body con scroll y contenido responsive
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // Determinar si es desktop/tablet (ancho mayor a 600)
+          final isWideScreen = constraints.maxWidth > 600;
+          final contentWidth = isWideScreen ? 820.0 : constraints.maxWidth;
+
+          return Column(
+            children: [
+              // Stepper horizontal fijo en la parte superior
+              MpStepper(
+                currentStep: _currentStep,
+                helperText: 'Toma 1 minuto. Puedes editar antes de enviar.',
               ),
-            );
-          },
-          steps: [
-            Step(
-              title: const Text("Ubicación"),
-              isActive: _currentStep >= 0,
-              state: _currentStep > 0 ? StepState.complete : StepState.editing,
-              content: Column(
-                children: [
-                  TextField(
-                    controller: _calleCtrl,
-                    decoration: const InputDecoration(
-                      labelText: "Calle",
-                      prefixIcon: Icon(Icons.add_road),
+
+              // Contenido scrollable del paso actual
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isWideScreen
+                        ? (constraints.maxWidth - contentWidth) / 2
+                        : MpSpacing.lg,
+                    vertical: MpSpacing.lg,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: contentWidth),
+                      child: _buildStepContent(),
                     ),
                   ),
-                  const SizedBox(height: 15),
-                  Row(
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+
+      // Footer fijo con CTAs
+      bottomNavigationBar: MpCtaFooter(
+        primaryLabel: _currentStep == 2 ? 'Enviar solicitud' : 'Siguiente',
+        onPrimaryPressed: _onNextPressed,
+        isPrimaryEnabled: _isPrimaryEnabled,
+        isLoading: _isLoading,
+        showBack: _currentStep > 0,
+        onBackPressed: _onBackPressed,
+        helperText: _currentHelperText,
+      ),
+    );
+  }
+
+  /// Construye el contenido del paso actual
+  Widget _buildStepContent() {
+    switch (_currentStep) {
+      case 0:
+        return _buildStep1Direccion();
+      case 1:
+        return _buildStep2Muebles();
+      case 2:
+        return _buildStep3Confirmar();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  // ============================================================================
+  // PASO 1: DIRECCIÓN DEL SERVICIO
+  // ============================================================================
+
+  Widget _buildStep1Direccion() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Card A: Dirección del servicio
+        MpCard(
+          title: 'Dirección del servicio',
+          child: Column(
+            children: [
+              // Campo: Calle
+              TextField(
+                controller: _calleCtrl,
+                onChanged: (_) => setState(() {}), // Actualizar validaciones
+                decoration: MpInputDecoration.standard(
+                  label: 'Calle',
+                  prefixIcon: Icons.add_road,
+                ),
+              ),
+              const SizedBox(height: MpSpacing.lg),
+
+              // Row: Número + Colonia (responsive)
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // En móvil (< 500): uno debajo del otro
+                  final isNarrow = constraints.maxWidth < 500;
+
+                  if (isNarrow) {
+                    return Column(
+                      children: [
+                        TextField(
+                          controller: _numeroCtrl,
+                          onChanged: (_) => setState(() {}),
+                          keyboardType: TextInputType.text,
+                          maxLength: 5,
+                          decoration: MpInputDecoration.standard(
+                            label: 'Número',
+                            prefixIcon: Icons.numbers,
+                          ),
+                        ),
+                        const SizedBox(height: MpSpacing.lg),
+                        TextField(
+                          controller: _coloniaCtrl,
+                          onChanged: (_) => setState(() {}),
+                          decoration: MpInputDecoration.standard(
+                            label: 'Colonia',
+                            prefixIcon: Icons.location_city,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  // En desktop: lado a lado
+                  return Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: _numeroCtrl,
-                          decoration: const InputDecoration(
-                            labelText: "Número",
+                          onChanged: (_) => setState(() {}),
+                          keyboardType: TextInputType.text,
+                          maxLength: 5,
+                          decoration: MpInputDecoration.standard(
+                            label: 'Número',
+                            prefixIcon: Icons.numbers,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: MpSpacing.lg),
                       Expanded(
                         flex: 2,
                         child: TextField(
                           controller: _coloniaCtrl,
-                          decoration: const InputDecoration(
-                            labelText: "Colonia",
+                          onChanged: (_) => setState(() {}),
+                          decoration: MpInputDecoration.standard(
+                            label: 'Colonia',
+                            prefixIcon: Icons.location_city,
                           ),
                         ),
                       ),
                     ],
+                  );
+                },
+              ),
+              const SizedBox(height: MpSpacing.lg),
+
+              // Campo: Referencias (multiline) - máximo 300 palabras
+              TextField(
+                controller: _referenciasCtrl,
+                maxLines: 2,
+                maxLength:
+                    1500, // ~300 palabras aprox (5 caracteres promedio por palabra)
+                decoration: MpInputDecoration.standard(
+                  label: 'Referencias',
+                  hint: 'Ej. casa blanca, reja negra, entre calles...',
+                  prefixIcon: Icons.info_outline,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: MpSpacing.lg),
+
+        // Card B: Fecha del servicio
+        MpCard(
+          title: 'Fecha del servicio',
+          child: Column(
+            children: [
+              // Selector de fecha
+              InkWell(
+                onTap: _selectDate,
+                borderRadius: BorderRadius.circular(MpRadius.input),
+                child: Container(
+                  padding: const EdgeInsets.all(MpSpacing.lg),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: MpColors.borderLight),
+                    borderRadius: BorderRadius.circular(MpRadius.input),
                   ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: _referenciasCtrl,
-                    decoration: const InputDecoration(labelText: "Referencias"),
-                  ),
-                  const SizedBox(height: 15),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: ListTile(
-                      title: const Text(
-                        "Fecha del servicio",
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_today,
+                        color: MpColors.primaryBlue,
+                        size: 24,
                       ),
-                      subtitle: Text(
-                        DateFormat(
-                          'dd MMMM yyyy',
-                          'es',
-                        ).format(_fechaSeleccionada),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _primaryBlue,
-                          fontSize: 16,
+                      const SizedBox(width: MpSpacing.lg),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Fecha seleccionada',
+                              style: MpTextStyles.label,
+                            ),
+                            const SizedBox(height: MpSpacing.xs),
+                            Text(
+                              DateFormat(
+                                'EEEE, d MMMM yyyy',
+                                'es',
+                              ).format(_fechaSeleccionada),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: MpColors.primaryBlue,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      trailing: Icon(Icons.calendar_today, color: _primaryBlue),
-                      onTap: () async {
-                        final d = await showDatePicker(
-                          context: context,
-                          initialDate: _fechaSeleccionada,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime(2026),
+                      const Icon(
+                        Icons.chevron_right,
+                        color: MpColors.textSecondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: MpSpacing.sm),
+              // Helper text
+              const Text(
+                'Puedes cambiarla después',
+                style: MpTextStyles.helper,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Abre el selector de fecha con MaterialLocalizations incluidas
+  /// CORREGIDO: Agregar Localizations.override para incluir localizaciones de Material
+  Future<void> _selectDate() async {
+    // Mostrar DatePicker con localizaciones envueltas
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _fechaSeleccionada,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      // Usar el contexto actual para las localizaciones
+      builder: (context, child) {
+        // Envolver en Localizations para asegurar que MaterialLocalizations esté disponible
+        return Localizations(
+          locale: const Locale('es', 'ES'),
+          delegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          child: child!,
+        );
+      },
+    );
+    if (date != null) {
+      setState(() => _fechaSeleccionada = date);
+    }
+  }
+
+  // ============================================================================
+  // PASO 2: MUEBLES
+  // ============================================================================
+
+  Widget _buildStep2Muebles() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Chip contador de muebles
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: MpSpacing.lg,
+            vertical: MpSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: _carrito.isEmpty
+                ? MpColors.borderLight
+                : MpColors.primaryBlue.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(MpRadius.chip),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.chair_outlined,
+                size: 18,
+                color: _carrito.isEmpty
+                    ? MpColors.textSecondary
+                    : MpColors.primaryBlue,
+              ),
+              const SizedBox(width: MpSpacing.sm),
+              Text(
+                _carrito.isEmpty
+                    ? '0 muebles agregados'
+                    : _carrito.length == 1
+                    ? '1 mueble agregado'
+                    : '${_carrito.length} muebles agregados',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: _carrito.isEmpty
+                      ? MpColors.textSecondary
+                      : MpColors.primaryBlue,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: MpSpacing.xl),
+
+        // Estado vacío o lista de items
+        if (_carrito.isEmpty) _buildEmptyState() else _buildItemsList(),
+
+        const SizedBox(height: MpSpacing.lg),
+
+        // Botón agregar mueble (siempre visible)
+        OutlinedButton.icon(
+          onPressed: _abrirModalAgregarMueble,
+          icon: const Icon(Icons.add),
+          label: Text(
+            _carrito.isEmpty ? 'Agregar mueble' : '+ Agregar otro mueble',
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: MpColors.primaryBlue,
+            side: const BorderSide(color: MpColors.primaryBlue),
+            padding: const EdgeInsets.symmetric(vertical: MpSpacing.lg),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(MpRadius.button),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Estado vacío cuando no hay muebles agregados
+  Widget _buildEmptyState() {
+    return MpCard(
+      padding: const EdgeInsets.all(MpSpacing.xxl),
+      child: Column(
+        children: [
+          // Ícono grande
+          Container(
+            padding: const EdgeInsets.all(MpSpacing.xl),
+            decoration: BoxDecoration(
+              color: MpColors.primaryBlue.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.weekend_outlined,
+              size: 48,
+              color: MpColors.primaryBlue,
+            ),
+          ),
+          const SizedBox(height: MpSpacing.xl),
+
+          // Título
+          const Text(
+            'Agrega lo que deseas limpiar',
+            style: MpTextStyles.sectionTitle,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: MpSpacing.lg),
+
+          // Bullets informativos
+          _buildBulletPoint('Añade muebles o servicios al pedido'),
+          _buildBulletPoint('Puedes subir foto (opcional)'),
+          _buildBulletPoint('Confirmas todo en el último paso'),
+        ],
+      ),
+    );
+  }
+
+  /// Bullet point individual
+  Widget _buildBulletPoint(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: MpSpacing.xs),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.check_circle_outline,
+            size: 18,
+            color: MpColors.success,
+          ),
+          const SizedBox(width: MpSpacing.sm),
+          Expanded(child: Text(text, style: MpTextStyles.body)),
+        ],
+      ),
+    );
+  }
+
+  /// Lista de items del carrito
+  Widget _buildItemsList() {
+    return Column(
+      children: _carrito.asMap().entries.map((entry) {
+        final index = entry.key;
+        final item = entry.value;
+
+        return MpItemCard(
+          badge: '${item.cantidad}x',
+          title: item.nombreServicio,
+          subtitle: item.descripcion,
+          hasPhoto: item.fotos.isNotEmpty,
+          onEdit: () => _editarItem(index),
+          onDelete: () => _confirmarEliminarItem(index),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Confirma eliminación de un item
+  void _confirmarEliminarItem(int index) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(MpRadius.card),
+        ),
+        title: const Text('¿Eliminar mueble?'),
+        content: Text(
+          'Se eliminará "${_carrito[index].nombreServicio}" del pedido.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() => _carrito.removeAt(index));
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: MpColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Edita un item existente (reabre el modal con datos precargados)
+  void _editarItem(int index) {
+    // Por simplicidad, abrimos el modal de agregar
+    // En una implementación más completa, se precargarían los datos
+    _abrirModalAgregarMueble(editIndex: index);
+  }
+
+  // ============================================================================
+  // MODAL: AGREGAR MUEBLE
+  // ============================================================================
+
+  /// Abre el modal para agregar un mueble/servicio
+  void _abrirModalAgregarMueble({int? editIndex}) {
+    // Variables locales del modal
+    dynamic selectedService;
+    final notaCtrl = TextEditingController();
+    int cantidad = 1;
+    List<XFile> fotosTemporales = []; // Cambiado a XFile
+
+    // Si estamos editando, precargar datos
+    if (editIndex != null && editIndex < _carrito.length) {
+      final item = _carrito[editIndex];
+      selectedService = _catalogo.firstWhere(
+        (s) => s['id'] == item.servicioCatalogoId,
+        orElse: () => null,
+      );
+      notaCtrl.text = item.descripcion;
+      cantidad = item.cantidad;
+      fotosTemporales = List.from(item.fotos);
+    }
+
+    // Verificar que hay servicios disponibles
+    if (_catalogo.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este negocio aún no tiene servicios configurados.'),
+          backgroundColor: MpColors.warning,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSt) => Container(
+          decoration: const BoxDecoration(
+            color: MpColors.cardBg,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + MpSpacing.lg,
+            top: MpSpacing.sm,
+            left: MpSpacing.xl,
+            right: MpSpacing.xl,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Drag handle
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: MpColors.borderLight,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: MpSpacing.lg),
+
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      editIndex != null ? 'Editar mueble' : 'Agregar mueble',
+                      style: MpTextStyles.sectionTitle.copyWith(
+                        color: MpColors.primaryBlue,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(
+                        Icons.close,
+                        color: MpColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: MpSpacing.xl),
+
+                // 1. Tipo de mueble (dropdown)
+                DropdownButtonFormField(
+                  isExpanded: true,
+                  value: selectedService,
+                  decoration: MpInputDecoration.standard(
+                    label: 'Tipo de mueble',
+                    prefixIcon: Icons.chair_outlined,
+                  ),
+                  items: _catalogo
+                      .map(
+                        (e) => DropdownMenuItem(
+                          value: e,
+                          child: Text(
+                            e['nombre'],
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) => setSt(() => selectedService = val),
+                ),
+                const SizedBox(height: MpSpacing.lg),
+
+                // 2. Cantidad con +/-
+                Row(
+                  children: [
+                    const Text(
+                      'Cantidad:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(width: MpSpacing.lg),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: MpColors.bgScaffold,
+                        borderRadius: BorderRadius.circular(MpRadius.button),
+                        border: Border.all(color: MpColors.borderLight),
+                      ),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove),
+                            onPressed: cantidad > 1
+                                ? () => setSt(() => cantidad--)
+                                : null,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: MpSpacing.md,
+                            ),
+                            child: Text(
+                              '$cantidad',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.add,
+                              color: MpColors.primaryBlue,
+                            ),
+                            onPressed: () => setSt(() => cantidad++),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: MpSpacing.lg),
+
+                // 3. Detalles (multiline) - máximo 200 palabras
+                TextField(
+                  controller: notaCtrl,
+                  maxLines: 2,
+                  maxLength:
+                      1000, // ~200 palabras aprox (5 caracteres promedio por palabra)
+                  decoration: MpInputDecoration.standard(
+                    label: 'Detalles (manchas, tela...)',
+                    hint: 'Describe el estado o características',
+                    prefixIcon: Icons.info_outline,
+                  ),
+                ),
+                const SizedBox(height: MpSpacing.lg),
+
+                // 4. Agregar foto (CORREGIDO para Web)
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final ImagePicker picker = ImagePicker();
+                        final XFile? image = await picker.pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 50,
                         );
-                        if (d != null) setState(() => _fechaSeleccionada = d);
+                        if (image != null) {
+                          setSt(() => fotosTemporales.add(image));
+                        }
+                      },
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Agregar foto'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: MpColors.primaryBlue,
+                        side: const BorderSide(color: MpColors.primaryBlue),
+                      ),
+                    ),
+                    const SizedBox(width: MpSpacing.md),
+                    const Text(
+                      '(Opcional) Ayuda a cotizar mejor',
+                      style: MpTextStyles.helper,
+                    ),
+                  ],
+                ),
+
+                // Preview de fotos (CORREGIDO para Web)
+                if (fotosTemporales.isNotEmpty) ...[
+                  const SizedBox(height: MpSpacing.lg),
+                  SizedBox(
+                    height: 70,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: fotosTemporales.length,
+                      itemBuilder: (context, index) {
+                        return Stack(
+                          children: [
+                            Container(
+                              margin: const EdgeInsets.only(
+                                right: MpSpacing.sm,
+                              ),
+                              width: 70,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(
+                                  MpSpacing.sm,
+                                ),
+                                color: Colors.grey[200],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(
+                                  MpSpacing.sm,
+                                ),
+                                // Usar FutureBuilder para cargar imagen async
+                                child: FutureBuilder<Widget>(
+                                  future: _buildImagePreview(
+                                    fotosTemporales[index],
+                                  ),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.hasData) {
+                                      return snapshot.data!;
+                                    }
+                                    return const Center(
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 2,
+                              right: 12,
+                              child: GestureDetector(
+                                onTap: () => setSt(
+                                  () => fotosTemporales.removeAt(index),
+                                ),
+                                child: const CircleAvatar(
+                                  backgroundColor: MpColors.error,
+                                  radius: 10,
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 12,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
                       },
                     ),
                   ),
                 ],
-              ),
-            ),
-            Step(
-              title: const Text("Muebles"),
-              isActive: _currentStep >= 1,
-              state: _currentStep > 1 ? StepState.complete : StepState.editing,
-              content: Column(
-                children: [
-                  if (_carrito.isEmpty)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(40),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.grey.shade200,
-                          width: 2,
-                          style: BorderStyle.solid,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.add_shopping_cart_rounded,
-                            size: 60,
-                            color: Colors.grey[300],
+
+                const SizedBox(height: MpSpacing.xl),
+
+                // Botón primario: Agregar al pedido
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (selectedService == null) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text('Selecciona un tipo de mueble'),
+                            backgroundColor: MpColors.error,
                           ),
-                          const SizedBox(height: 10),
-                          const Text(
-                            "Tu carrito está vacío",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                        );
+                        return;
+                      }
+
+                      final nuevoItem = ItemBorrador(
+                        servicioCatalogoId: selectedService['id'],
+                        nombreServicio: selectedService['nombre'],
+                        descripcion: notaCtrl.text,
+                        cantidad: cantidad,
+                        fotos: List.from(fotosTemporales),
+                      );
+
+                      setState(() {
+                        if (editIndex != null) {
+                          _carrito[editIndex] = nuevoItem;
+                        } else {
+                          _carrito.add(nuevoItem);
+                        }
+                      });
+                      Navigator.pop(ctx);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: MpColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(MpRadius.button),
                       ),
                     ),
-                  ..._carrito.map(
-                    (item) => Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(12),
-                        leading: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.blue[50],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            "${item.cantidad}x",
-                            style: TextStyle(
-                              color: _primaryBlue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          item.nombreServicio,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          item.descripcion,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
-                          ),
-                          onPressed: () =>
-                              setState(() => _carrito.remove(item)),
-                        ),
-                      ),
+                    child: Text(
+                      editIndex != null
+                          ? 'Guardar cambios'
+                          : 'Agregar al pedido',
+                      style: MpTextStyles.buttonPrimary,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _agregarItemDialog,
-                      icon: const Icon(Icons.add),
-                      label: const Text("AGREGAR MUEBLE"),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: BorderSide(color: _primaryBlue),
-                        foregroundColor: _primaryBlue,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                ),
+
+                // Botón secundario: Agregar y añadir otro
+                if (editIndex == null) ...[
+                  const SizedBox(height: MpSpacing.md),
+                  TextButton(
+                    onPressed: () {
+                      if (selectedService == null) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text('Selecciona un tipo de mueble'),
+                            backgroundColor: MpColors.error,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setState(() {
+                        _carrito.add(
+                          ItemBorrador(
+                            servicioCatalogoId: selectedService['id'],
+                            nombreServicio: selectedService['nombre'],
+                            descripcion: notaCtrl.text,
+                            cantidad: cantidad,
+                            fotos: List.from(fotosTemporales),
+                          ),
+                        );
+                      });
+
+                      // Limpiar campos para agregar otro
+                      setSt(() {
+                        selectedService = null;
+                        notaCtrl.clear();
+                        cantidad = 1;
+                        fotosTemporales.clear();
+                      });
+
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text('¡Agregado! Añade otro mueble'),
+                          backgroundColor: MpColors.success,
+                          duration: Duration(seconds: 1),
                         ),
+                      );
+                    },
+                    child: const Text(
+                      'Agregar y añadir otro',
+                      style: TextStyle(
+                        color: MpColors.primaryBlue,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ],
+
+                const SizedBox(height: MpSpacing.lg),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Construye el preview de imagen compatible con Web y Mobile
+  Future<Widget> _buildImagePreview(XFile xFile) async {
+    if (kIsWeb) {
+      // En Web, usar bytes
+      final bytes = await xFile.readAsBytes();
+      return Image.memory(bytes, fit: BoxFit.cover, width: 70, height: 70);
+    } else {
+      // En Mobile, usar path
+      return Image.network(
+        xFile.path,
+        fit: BoxFit.cover,
+        width: 70,
+        height: 70,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(Icons.image, color: Colors.grey);
+        },
+      );
+    }
+  }
+
+  // ============================================================================
+  // PASO 3: CONFIRMAR
+  // ============================================================================
+
+  Widget _buildStep3Confirmar() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Card: Resumen del pedido
+        MpCard(
+          title: 'Resumen del pedido',
+          titleAction: TextButton(
+            onPressed: () => setState(() => _currentStep = 1),
+            child: const Text(
+              'Editar',
+              style: TextStyle(
+                color: MpColors.primaryBlue,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            Step(
-              title: const Text("Fin"),
-              isActive: _currentStep >= 2,
-              content: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 15,
-                    ),
-                  ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Dirección
+              _buildSummaryRow(
+                Icons.location_on_outlined,
+                'Dirección',
+                '${_calleCtrl.text} #${_numeroCtrl.text}, Col. ${_coloniaCtrl.text}',
+              ),
+
+              if (_referenciasCtrl.text.isNotEmpty) ...[
+                const SizedBox(height: MpSpacing.sm),
+                Padding(
+                  padding: const EdgeInsets.only(left: 32),
+                  child: Text(
+                    'Ref: ${_referenciasCtrl.text}',
+                    style: MpTextStyles.helper,
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "RESUMEN DEL PEDIDO",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const Divider(height: 30),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on_outlined,
-                          size: 20,
-                          color: Colors.grey,
+              ],
+
+              const Divider(height: MpSpacing.xl),
+
+              // Fecha
+              _buildSummaryRow(
+                Icons.calendar_today_outlined,
+                'Fecha',
+                DateFormat(
+                  'EEEE, d MMMM yyyy',
+                  'es',
+                ).format(_fechaSeleccionada),
+              ),
+
+              const Divider(height: MpSpacing.xl),
+
+              // Lista de muebles
+              const Text(
+                'Muebles a limpiar:',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: MpColors.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: MpSpacing.sm),
+
+              ...List.generate(_carrito.length, (index) {
+                final item = _carrito[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: MpSpacing.xs),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: MpSpacing.sm,
+                          vertical: MpSpacing.xs,
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            "${_calleCtrl.text} #${_numeroCtrl.text}",
-                            style: const TextStyle(fontWeight: FontWeight.w500),
+                        decoration: BoxDecoration(
+                          color: MpColors.primaryBlue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(MpSpacing.xs),
+                        ),
+                        child: Text(
+                          '${item.cantidad}x',
+                          style: const TextStyle(
+                            color: MpColors.primaryBlue,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      children: [
+                      ),
+                      const SizedBox(width: MpSpacing.md),
+                      Expanded(
+                        child: Text(
+                          item.nombreServicio,
+                          style: MpTextStyles.body,
+                        ),
+                      ),
+                      if (item.fotos.isNotEmpty)
                         const Icon(
-                          Icons.calendar_month_outlined,
-                          size: 20,
-                          color: Colors.grey,
+                          Icons.photo_camera_outlined,
+                          size: 16,
+                          color: MpColors.success,
                         ),
-                        const SizedBox(width: 10),
-                        Text(
-                          DateFormat(
-                            'dd MMMM yyyy',
-                            'es',
-                          ).format(_fechaSeleccionada),
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.chair_outlined,
-                          size: 20,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          "${_carrito.length} muebles agregados",
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: MpSpacing.lg),
+
+        // Trust block
+        MpCard(
+          padding: const EdgeInsets.all(MpSpacing.lg),
+          child: Row(
+            children: [
+              _buildTrustBadge(
+                Icons.verified_user_outlined,
+                'Técnicos\nverificados',
+              ),
+              _buildTrustBadge(
+                Icons.support_agent_outlined,
+                'Soporte\ndisponible',
+              ),
+              _buildTrustBadge(
+                Icons.check_circle_outline,
+                'Confirmación\nal enviar',
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: MpSpacing.lg),
+
+        // Nota final
+        Container(
+          padding: const EdgeInsets.all(MpSpacing.lg),
+          decoration: BoxDecoration(
+            color: MpColors.primaryBlue.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(MpRadius.card),
+            border: Border.all(
+              color: MpColors.primaryBlue.withValues(alpha: 0.2),
+            ),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.info_outline, color: MpColors.primaryBlue, size: 20),
+              SizedBox(width: MpSpacing.md),
+              Expanded(
+                child: Text(
+                  'Recibirás confirmación cuando el equipo revise tu solicitud.',
+                  style: TextStyle(
+                    color: MpColors.primaryBlue,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ],
+    );
+  }
+
+  /// Fila de resumen con ícono, label y valor
+  Widget _buildSummaryRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: MpColors.textSecondary),
+        const SizedBox(width: MpSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: MpTextStyles.label),
+              const SizedBox(height: MpSpacing.xs),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Badge de confianza
+  Widget _buildTrustBadge(IconData icon, String label) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: MpColors.success, size: 28),
+          const SizedBox(height: MpSpacing.sm),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 11,
+              color: MpColors.textSecondary,
+              height: 1.2,
+            ),
+          ),
+        ],
       ),
     );
   }

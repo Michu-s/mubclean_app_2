@@ -199,12 +199,13 @@ class _CustomerRequestsScreenState extends State<CustomerRequestsScreen> {
                                     color: _primaryBlue.withOpacity(0.2),
                                   ),
                                 ),
+                                // REMOVED PRICE UI: Se eliminó el texto de Cotización con precio
                                 child: Column(
                                   children: [
                                     Text(
-                                      "Cotización: \$${s.precioTotal}",
+                                      "¿Aceptas esta oferta?",
                                       style: TextStyle(
-                                        fontSize: 18,
+                                        fontSize: 16,
                                         fontWeight: FontWeight.bold,
                                         color: _primaryBlue,
                                       ),

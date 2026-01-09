@@ -95,10 +95,11 @@ class _CustomerRequestDetailScreenState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        // REMOVED PRICE UI: Se eliminó el texto de Total del dialog
         title: Text(aceptar ? "Confirmar y Enviar" : "Rechazar Oferta"),
         content: Text(
           aceptar
-              ? "Al aceptar, notificaremos al negocio para que proceda a agendar tu cita.\n\nTotal: \$${_solicitudActual.precioTotal}"
+              ? "Al aceptar, notificaremos al negocio para que proceda a agendar tu cita."
               : "¿Seguro que deseas cancelar esta solicitud?",
         ),
         actions: [
@@ -477,43 +478,18 @@ class _CustomerRequestDetailScreenState
                   ),
                   const SizedBox(height: 25),
 
-                  // DETALLE DE COSTOS
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Detalle de Cotización",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      if (_solicitudActual.precioTotal > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue[50],
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            "Total: \$${_solicitudActual.precioTotal}",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue[800],
-                            ),
-                          ),
-                        ),
-                    ],
+                  // REMOVED PRICE UI: Se eliminó el container con Total
+                  // DETALLE DE SERVICIOS (sin precios)
+                  const Text(
+                    "Detalle de Servicios",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 10),
 
                   ..._items.map((item) {
                     final fotos =
                         item['fotos_solicitud'] as List<dynamic>? ?? [];
-                    final precioUnitario = item['precio_unitario'] ?? 0;
+                    // REMOVED: precioUnitario ya no se usa porque eliminamos la UI de precios
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -572,15 +548,7 @@ class _CustomerRequestDetailScreenState
                                     ],
                                   ),
                                 ),
-                                if (precioUnitario > 0)
-                                  Text(
-                                    "\$${precioUnitario}",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: Colors.green,
-                                    ),
-                                  ),
+                                // REMOVED PRICE UI: Se eliminó el texto de precio_unitario  ),
                               ],
                             ),
                             if (fotos.isNotEmpty) ...[

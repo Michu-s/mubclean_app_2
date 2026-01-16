@@ -102,12 +102,19 @@ class AuthService extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      // Si hay error de red/RLS/etc., evitamos romper la app.
-      // Dejamos el perfil en null para que el AuthGate muestre loading.
+      // Si hay error de red/RLS/etc., creamos un perfil por defecto
+      // para que la app pueda continuar al panel de cliente.
       if (kDebugMode) {
         debugPrint('Error cargando perfil desde perfiles: $e');
       }
-      _perfilActual = null;
+      _perfilActual = Perfil(
+        id: user.id,
+        email: user.email ?? '',
+        nombreCompleto: 'Usuario',
+        rol: 'cliente',
+        telefono: null,
+        fotoUrl: null,
+      );
       notifyListeners();
     }
   }
@@ -140,7 +147,7 @@ class AuthService extends ChangeNotifier {
       if (user != null) {
         // 2) NO insertamos manualmente en perfiles: lo hace el TRIGGER en Supabase.
         // 3) Refrescamos el estado del perfil en la app.
-        await loadUserProfile();
+          await loadUserProfile();
       }
 
       return null;

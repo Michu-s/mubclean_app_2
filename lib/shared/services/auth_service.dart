@@ -34,8 +34,7 @@ class AuthService extends ChangeNotifier {
       }
 
       if (event == AuthChangeEvent.signedIn ||
-          event == AuthChangeEvent.userUpdated ||
-          event == AuthChangeEvent.tokenRefreshed) {
+          event == AuthChangeEvent.userUpdated) {
         await loadUserProfile();
       }
     });
@@ -147,7 +146,7 @@ class AuthService extends ChangeNotifier {
       if (user != null) {
         // 2) NO insertamos manualmente en perfiles: lo hace el TRIGGER en Supabase.
         // 3) Refrescamos el estado del perfil en la app.
-          await loadUserProfile();
+        await loadUserProfile();
       }
 
       return null;

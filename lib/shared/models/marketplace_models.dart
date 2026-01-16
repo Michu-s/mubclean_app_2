@@ -19,6 +19,7 @@ class Perfil {
   final String email;
   final String nombreCompleto;
   final String rol; // 'cliente', 'admin_negocio', 'empleado'
+  final String? telefono;
   final String? fotoUrl;
 
   Perfil({
@@ -26,6 +27,7 @@ class Perfil {
     required this.email,
     required this.nombreCompleto,
     required this.rol,
+    this.telefono,
     this.fotoUrl,
   });
 
@@ -35,6 +37,7 @@ class Perfil {
       email: json['email'] ?? '',
       nombreCompleto: json['nombre_completo'] ?? 'Usuario',
       rol: json['rol'] ?? 'cliente',
+      telefono: json['telefono'],
       fotoUrl: json['foto_perfil_url'],
     );
   }

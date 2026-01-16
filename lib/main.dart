@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -15,10 +16,20 @@ import 'features/employee/employee_home.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  const supabaseUrl = 'https://wtlitcaiboefcujqrmrg.supabase.co';
+  const supabaseAnonKey = 'sb_publishable_ZE7_csZsdp62HMNIocfbWQ_ogId0bVq';
+
   await Supabase.initialize(
-    url: 'https://bvcukglvjgutgzzaynrj.supabase.co',
-    anonKey: 'sb_publishable_RbhO2um3Slz3oRcXd1UYaQ_tzUvBz3o',
+    // NUEVO proyecto Supabase
+    url: supabaseUrl,
+    // Nota: en Supabase Flutter normalmente se usa la ANON key.
+    // Aquí se deja la clave indicada por el usuario.
+    anonKey: supabaseAnonKey,
   );
+
+  if (kDebugMode) {
+    debugPrint('Supabase URL configurada: $supabaseUrl');
+  }
 
   runApp(
     MultiProvider(

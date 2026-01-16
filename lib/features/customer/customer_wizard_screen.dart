@@ -888,6 +888,7 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
 
                 // 2. Cantidad con +/-
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
                       'Cantidad:',
@@ -897,6 +898,7 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
                       ),
                     ),
                     const SizedBox(width: MpSpacing.lg),
+                    // Wrap con IntrinsicWidth o un Container fijo para evitar overflow si crece mucho
                     Container(
                       decoration: BoxDecoration(
                         color: MpColors.bgScaffold,
@@ -904,6 +906,7 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
                         border: Border.all(color: MpColors.borderLight),
                       ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
                             icon: const Icon(Icons.remove),
@@ -911,9 +914,11 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
                                 ? () => setSt(() => cantidad--)
                                 : null,
                           ),
-                          Padding(
+                          Container(
+                            constraints: const BoxConstraints(minWidth: 40),
+                            alignment: Alignment.center,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: MpSpacing.md,
+                              horizontal: MpSpacing.sm,
                             ),
                             child: Text(
                               '$cantidad',
@@ -941,8 +946,7 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
                 TextField(
                   controller: notaCtrl,
                   maxLines: 2,
-                  maxLength:
-                      1000, // ~200 palabras aprox (5 caracteres promedio por palabra)
+                  maxLength: 1000,
                   decoration: MpInputDecoration.standard(
                     label: 'Detalles (manchas, tela...)',
                     hint: 'Describe el estado o características',
@@ -951,7 +955,12 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
                 ),
                 const SizedBox(height: MpSpacing.lg),
 
-                // 4. Agregar foto (CORREGIDO para Web)
+                // 4. Agregar foto (OBLIGATORIO)
+                const Text(
+                  "Evidencias visuales (Obligatorio)",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 5),
                 Row(
                   children: [
                     OutlinedButton.icon(
@@ -966,16 +975,18 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
                         }
                       },
                       icon: const Icon(Icons.camera_alt_outlined),
-                      label: const Text('Agregar foto'),
+                      label: const Text('Adjuntar foto'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: MpColors.primaryBlue,
                         side: const BorderSide(color: MpColors.primaryBlue),
                       ),
                     ),
                     const SizedBox(width: MpSpacing.md),
-                    const Text(
-                      '(Opcional) Ayuda a cotizar mejor',
-                      style: MpTextStyles.helper,
+                    const Flexible(
+                      child: Text(
+                        'Necesario para cotizar correctamente',
+                        style: MpTextStyles.helper,
+                      ),
                     ),
                   ],
                 ),
@@ -1064,6 +1075,17 @@ class _CustomerWizardScreenState extends State<CustomerWizardScreen> {
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           const SnackBar(
                             content: Text('Selecciona un tipo de mueble'),
+                            backgroundColor: MpColors.error,
+                          ),
+                        );
+                        return;
+                      }
+
+                      // VALIDACIÓN: FOTO OBLIGATORIA
+                      if (fotosTemporales.isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text('Debes adjuntar al menos una foto'),
                             backgroundColor: MpColors.error,
                           ),
                         );

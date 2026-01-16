@@ -248,19 +248,22 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
                                   ),
-                                  maxLines: 2,
+                                  maxLines: 1, // Reducido a 1 línea
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
                                 if (s['descripcion'] != null)
-                                  Text(
-                                    s['descripcion'],
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey,
+                                  Expanded(
+                                    // Usamos Expanded para que ocupe el resto
+                                    child: Text(
+                                      s['descripcion'],
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                               ],
                             ),

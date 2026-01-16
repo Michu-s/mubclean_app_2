@@ -13,37 +13,31 @@ class CustomerRequestsScreen extends StatefulWidget {
 
 class _CustomerRequestsScreenState extends State<CustomerRequestsScreen> {
   final _supabase = Supabase.instance.client;
-  List<Solicitud> _misSolicitudes = [];
-  bool _isLoading = true;
+  Stream<List<Solicitud>>? _solicitudesStream;
   final Color _primaryBlue = const Color(0xFF1565C0);
 
   @override
   void initState() {
     super.initState();
-    _fetchMisSolicitudes();
+    _setupStream();
   }
 
-  Future<void> _fetchMisSolicitudes() async {
-    setState(() => _isLoading = true);
+  void _setupStream() {
     final userId = _supabase.auth.currentUser!.id;
+    _solicitudesStream = _supabase
+        .from('solicitudes')
+        .stream(primaryKey: ['id'])
+        .eq('cliente_id', userId)
+        .order('created_at', ascending: false)
+        .map((maps) => maps.map((json) => Solicitud.fromJson(json)).toList());
+  }
 
-    try {
-      final response = await _supabase
-          .from('solicitudes')
-          .select()
-          .eq('cliente_id', userId)
-          .order('created_at', ascending: false);
-      final data = response as List<dynamic>;
-      if (mounted)
-        setState(() {
-          _misSolicitudes = data
-              .map((json) => Solicitud.fromJson(json))
-              .toList();
-          _isLoading = false;
-        });
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  Future<void> _handleRefresh() async {
+    setState(() {
+      _setupStream();
+    });
+    // Small delay to let the UI show the refresh action, though the stream update is what matters
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 
   Future<void> _responderCotizacion(String solicitudId, bool aceptar) async {
@@ -53,18 +47,21 @@ class _CustomerRequestsScreenState extends State<CustomerRequestsScreen> {
           .from('solicitudes')
           .update({'estado': nuevoEstado})
           .eq('id', solicitudId);
-      _fetchMisSolicitudes();
-      if (mounted)
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(aceptar ? "Oferta aceptada" : "Solicitud cancelada"),
+            backgroundColor: aceptar ? Colors.green : Colors.red,
           ),
         );
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
@@ -81,27 +78,96 @@ class _CustomerRequestsScreenState extends State<CustomerRequestsScreen> {
         elevation: 0,
         iconTheme: IconThemeData(color: _primaryBlue),
       ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: _primaryBlue))
-          : _misSolicitudes.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: _primaryBlue,
+        child: StreamBuilder<List<Solicitud>>(
+          stream: _solicitudesStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(
+                child: CircularProgressIndicator(color: _primaryBlue),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  Icon(Icons.history, size: 60, color: Colors.grey[300]),
-                  const SizedBox(height: 10),
-                  const Text(
-                    "Sin historial",
-                    style: TextStyle(color: Colors.grey),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.7,
+                    child: Center(child: Text('Error: ${snapshot.error}')),
                   ),
                 ],
-              ),
-            )
-          : ListView.builder(
+              );
+            }
+
+            final solicitudes = snapshot.data ?? [];
+
+            if (solicitudes.isEmpty) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.7,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.history,
+                            size: 60,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            "Sin historial",
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            "Desliza hacia abajo para actualizar",
+                            style: TextStyle(color: Colors.grey, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            return ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
-              itemCount: _misSolicitudes.length,
+              itemCount: solicitudes.length + 1,
               itemBuilder: (context, index) {
-                final s = _misSolicitudes[index];
+                if (index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.swipe_down,
+                            size: 14,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            "Desliza hacia abajo para actualizar",
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                final s = solicitudes[index - 1];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
@@ -199,7 +265,6 @@ class _CustomerRequestsScreenState extends State<CustomerRequestsScreen> {
                                     color: _primaryBlue.withOpacity(0.2),
                                   ),
                                 ),
-                                // REMOVED PRICE UI: Se eliminó el texto de Cotización con precio
                                 child: Column(
                                   children: [
                                     Text(
@@ -257,7 +322,10 @@ class _CustomerRequestsScreenState extends State<CustomerRequestsScreen> {
                   ),
                 );
               },
-            ),
+            );
+          },
+        ),
+      ),
     );
   }
 

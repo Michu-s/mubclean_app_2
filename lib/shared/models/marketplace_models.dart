@@ -141,3 +141,35 @@ class TicketSoporte {
     );
   }
 }
+
+class Resena {
+  final String id;
+  final String solicitudId;
+  final String negocioId;
+  final String clienteId;
+  final int calificacion;
+  final String? comentario;
+  final DateTime createdAt;
+
+  Resena({
+    required this.id,
+    required this.solicitudId,
+    required this.negocioId,
+    required this.clienteId,
+    required this.calificacion,
+    this.comentario,
+    required this.createdAt,
+  });
+
+  factory Resena.fromJson(Map<String, dynamic> json) {
+    return Resena(
+      id: json['id'],
+      solicitudId: json['solicitud_id'],
+      negocioId: json['negocio_id'],
+      clienteId: json['cliente_id'],
+      calificacion: json['calificacion'],
+      comentario: json['comentario'],
+      createdAt: DateTime.parse(json['created_at']),
+    );
+  }
+}

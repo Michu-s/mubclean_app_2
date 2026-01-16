@@ -27,6 +27,9 @@ class _CustomerRequestDetailScreenState
   String? _horaConfirmada;
   String? _nombreTecnico;
 
+  // Reseña del usuario (si ya calificó)
+  Resena? _miResena;
+
   @override
   void initState() {
     super.initState();
@@ -61,10 +64,25 @@ class _CustomerRequestDetailScreenState
           .eq('id', widget.solicitud.id)
           .single();
 
+      // 4. Buscar reseña existente
+      Resena? resenaEnconrada;
+      if (solRes['estado'] == 'completada') {
+        final resenaData = await _supabase
+            .from('resenas')
+            .select()
+            .eq('solicitud_id', widget.solicitud.id)
+            .maybeSingle();
+
+        if (resenaData != null) {
+          resenaEnconrada = Resena.fromJson(resenaData);
+        }
+      }
+
       if (mounted) {
         setState(() {
           _items = itemsRes as List<dynamic>;
           _evidencia = evidenciaRes;
+          _miResena = resenaEnconrada;
           _solicitudActual = Solicitud.fromJson(solRes);
 
           if (solRes['fecha_agendada_final'] != null) {
@@ -153,6 +171,98 @@ class _CustomerRequestDetailScreenState
         ).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     }
+  }
+
+  void _mostrarDialogoCalificar() {
+    int estrellas = 5;
+    final comentarioCtrl = TextEditingController();
+    bool enviando = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSt) {
+          return AlertDialog(
+            title: const Text("Calificar Servicio"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("¿Qué tal te pareció el servicio?"),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    return IconButton(
+                      onPressed: () => setSt(() => estrellas = index + 1),
+                      icon: Icon(
+                        index < estrellas ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 32,
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: comentarioCtrl,
+                  decoration: const InputDecoration(
+                    hintText: "Comentario opcional...",
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: enviando ? null : () => Navigator.pop(ctx),
+                child: const Text("Cancelar"),
+              ),
+              ElevatedButton(
+                onPressed: enviando
+                    ? null
+                    : () async {
+                        setSt(() => enviando = true);
+                        try {
+                          await _supabase.from('resenas').insert({
+                            'solicitud_id': widget.solicitud.id,
+                            'negocio_id': widget.solicitud.negocioId,
+                            'cliente_id': _supabase.auth.currentUser!.id,
+                            'calificacion': estrellas,
+                            'comentario': comentarioCtrl.text,
+                          });
+                          if (mounted) {
+                            Navigator.pop(ctx);
+                            _fetchDetails(); // Recargar para mostrar la reseña
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("¡Gracias por tu calificación!"),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          setSt(() => enviando = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("Error: $e")),
+                            );
+                          }
+                        }
+                      },
+                child: enviando
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text("Enviar"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -623,6 +733,82 @@ class _CustomerRequestDetailScreenState
                         ),
                       ],
                     ),
+                  ],
+
+                  // --- SECCIÓN DE CALIFICACIÓN (SOLO SI ESTÁ COMPLETADA) ---
+                  if (_solicitudActual.estado ==
+                      EstadoSolicitud.completada) ...[
+                    const SizedBox(height: 30),
+                    if (_miResena == null)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          onPressed: _mostrarDialogoCalificar,
+                          icon: const Icon(Icons.star, color: Colors.white),
+                          label: const Text(
+                            "CALIFICAR SERVICIO",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amber[700],
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.amber.withOpacity(0.5),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text(
+                              "Tu Calificación",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.brown,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(5, (index) {
+                                return Icon(
+                                  index < _miResena!.calificacion
+                                      ? Icons.star
+                                      : Icons.star_border,
+                                  color: Colors.amber,
+                                  size: 30,
+                                );
+                              }),
+                            ),
+                            if (_miResena!.comentario != null &&
+                                _miResena!.comentario!.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                '"${_miResena!.comentario}"',
+                                style: const TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  color: Colors.black54,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                   ],
                 ],
               ),

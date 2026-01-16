@@ -1,3 +1,4 @@
+import 'dart:async'; // Necesario para Timer
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
@@ -37,6 +38,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   final Color _primaryBlue = const Color(0xFF1565C0);
   final Color _bgLight = const Color(0xFFF5F9FF);
 
+  // Timer para refresco
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
@@ -44,11 +48,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkNegocioExistente();
     });
+
+    // Iniciar timer de refresco cada 5s
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_tieneNegocio) {
+        // Solo si ya sabemos que tiene negocio para evitar llamadas innecesarias
+        _checkNegocioExistente(silent: true);
+      }
+    });
   }
 
-  Future<void> _checkNegocioExistente() async {
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _tabController.dispose();
+    _nombreNegocioCtrl.dispose();
+    _descNegocioCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _checkNegocioExistente({bool silent = false}) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
+
+    if (!silent) {
+      // Solo mostrar loading si no es refresh silencioso
+      // Sin embargo, _checkNegocioExistente original no seteaba isLoading=true al principio explicitamente
+      // pero fetchSolicitudes si.
+    }
 
     try {
       final res = await _supabase
@@ -63,7 +90,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             _tieneNegocio = true;
             _errorMessage = null;
           });
-          await _fetchSolicitudes(res['id']);
+          await _fetchSolicitudes(res['id'], silent: silent);
         }
       } else {
         if (mounted) {
@@ -75,23 +102,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         }
       }
     } on PostgrestException catch (pgError) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoading = false;
           if (pgError.code != 'PGRST116') {
             _errorMessage = "Error de base de datos: ${pgError.message}";
           }
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });
+      }
     }
   }
 
-  Future<void> _fetchSolicitudes(String negocioId) async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchSolicitudes(
+    String negocioId, {
+    bool silent = false,
+  }) async {
+    if (!silent) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       final response = await _supabase
@@ -131,11 +165,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = "No se pudieron cargar las solicitudes";
+          // No mostramos error en silent refresh para no molestar
+          if (!silent) _errorMessage = "No se pudieron cargar las solicitudes";
         });
+      }
     }
   }
 

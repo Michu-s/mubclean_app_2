@@ -77,13 +77,59 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      final data = await _supabase
-          .from('usuarios')
+      // 1. Intentar buscar en 'perfiles'
+      var data = await _supabase
+          .from('perfiles')
           .select('*')
           .eq('id', user.id)
           .maybeSingle();
 
+      // 2. Si no existe, intentar recuperar de 'usuarios' (tabla antigua) y migrar
       if (data == null) {
+        try {
+          final oldUser = await _supabase
+              .from('usuarios')
+              .select('*')
+              .eq('id', user.id)
+              .maybeSingle();
+
+          if (oldUser != null) {
+            // Migrar datos existentes
+            await _supabase.from('perfiles').upsert({
+              'id': user.id,
+              'email': oldUser['email'],
+              'nombre_completo': oldUser['nombre_completo'],
+              'rol': 'cliente',
+              'telefono': oldUser['telefono'],
+              'foto_perfil_url': oldUser['url_foto_perfil'],
+            });
+          } else {
+            // Crear nuevo perfil por defecto
+            await _supabase.from('perfiles').upsert({
+              'id': user.id,
+              'email': user.email,
+              'nombre_completo':
+                  user.userMetadata?['nombre_completo'] ?? 'Usuario',
+              'rol': 'cliente',
+            });
+          }
+
+          // Volver a cargar tras la migración/creación
+          data = await _supabase
+              .from('perfiles')
+              .select('*')
+              .eq('id', user.id)
+              .maybeSingle();
+        } catch (e) {
+          debugPrint("Error migrando perfil: $e");
+          // Continuamos para usar el fallback
+        }
+      }
+
+      if (data != null) {
+        _perfilActual = Perfil.fromJson(data);
+      } else {
+        // Fallback final si la base de datos falla pero tenemos sesión
         _perfilActual = Perfil(
           id: user.id,
           email: user.email ?? '',
@@ -91,15 +137,19 @@ class AuthService extends ChangeNotifier {
           rol: 'cliente',
           fotoUrl: null,
         );
-      } else {
-        _perfilActual = Perfil.fromJson(data);
       }
 
       notifyListeners();
-    } catch (_) {
-      // Si hay error de red/RLS/etc., evitamos romper la app.
-      // Dejamos el perfil en null para que el AuthGate muestre loading.
-      _perfilActual = null;
+    } catch (e) {
+      debugPrint("Error critico cargando perfil: $e");
+      // Fallback de emergencia para no bloquear la app
+      _perfilActual = Perfil(
+        id: user.id,
+        email: user.email ?? '',
+        nombreCompleto: 'Usuario',
+        rol: 'cliente',
+        fotoUrl: null,
+      );
       notifyListeners();
     }
   }
@@ -138,7 +188,7 @@ class AuthService extends ChangeNotifier {
       // Si tienes "Email confirmation" activa y NO hay sesión,
       // este insert puede fallar por RLS si exige authenticated.
       // Por eso te dejo abajo el SQL con TRIGGER recomendado para que siempre funcione.
-      await _supabase.from('usuarios').upsert({
+      await _supabase.from('perfiles').upsert({
         'id': user.id,
         'email': email,
         'nombre_completo': nombre,

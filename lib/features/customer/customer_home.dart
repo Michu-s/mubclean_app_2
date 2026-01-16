@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +7,9 @@ import '../../shared/models/marketplace_models.dart';
 import 'business_profile_screen.dart'; // <--- CAMBIO: Importamos Perfil en lugar de Wizard directo
 
 class CustomerHomeScreen extends StatefulWidget {
-  const CustomerHomeScreen({super.key});
+  final bool isActive;
+
+  const CustomerHomeScreen({super.key, this.isActive = false});
 
   @override
   State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
@@ -18,13 +21,57 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   bool _isLoading = true;
   final Color _primaryBlue = const Color(0xFF1565C0);
 
+  // Timer para refresco automático
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     _fetchNegocios();
+    _handleTimer();
   }
 
-  Future<void> _fetchNegocios() async {
+  @override
+  void didUpdateWidget(CustomerHomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        // Al entrar, refrescamos inmediatamente y arrancamos timer
+        _fetchNegocios(silent: true);
+        _handleTimer();
+      } else {
+        // Al salir, cancelamos timer
+        _stopTimer();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopTimer();
+    super.dispose();
+  }
+
+  void _handleTimer() {
+    _stopTimer();
+    if (widget.isActive) {
+      _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+        _fetchNegocios(silent: true);
+      });
+    }
+  }
+
+  void _stopTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
+  Future<void> _fetchNegocios({bool silent = false}) async {
+    // Si es silent, no ponemos isLoading = true para no flashear la UI
+    if (!silent) {
+      setState(() => _isLoading = true);
+    }
+
     try {
       final response = await _supabase
           .from('negocios')
@@ -32,11 +79,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           .eq('activo', true)
           .order('nombre');
       final data = response as List<dynamic>;
-      if (mounted)
+      if (mounted) {
         setState(() {
           _negocios = data.map((json) => Negocio.fromJson(json)).toList();
           _isLoading = false;
         });
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -2,6 +2,7 @@
     <application
         android:label="mubclean_marketplace"
         android:name="${applicationName}"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -23,6 +24,16 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="miappflutter"
+                    android:host="pay" />
+                <data
+                    android:scheme="tuapp"
+                    android:host="pay" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

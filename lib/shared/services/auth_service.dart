@@ -77,7 +77,10 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      // 1. Intentar buscar en 'perfiles'
+      if (kDebugMode) {
+        debugPrint('Cargando perfil desde tabla: perfiles (id=${user.id})');
+      }
+
       var data = await _supabase
           .from('perfiles')
           .select('*')
@@ -135,19 +138,24 @@ class AuthService extends ChangeNotifier {
           email: user.email ?? '',
           nombreCompleto: 'Usuario',
           rol: 'cliente',
+          telefono: null,
           fotoUrl: null,
         );
       }
 
       notifyListeners();
     } catch (e) {
-      debugPrint("Error critico cargando perfil: $e");
-      // Fallback de emergencia para no bloquear la app
+      // Si hay error de red/RLS/etc., creamos un perfil por defecto
+      // para que la app pueda continuar al panel de cliente.
+      if (kDebugMode) {
+        debugPrint('Error cargando perfil desde perfiles: $e');
+      }
       _perfilActual = Perfil(
         id: user.id,
         email: user.email ?? '',
         nombreCompleto: 'Usuario',
         rol: 'cliente',
+        telefono: null,
         fotoUrl: null,
       );
       notifyListeners();
@@ -156,7 +164,7 @@ class AuthService extends ChangeNotifier {
 
   /// Registro:
   /// 1) Crea usuario en auth.users (email/password)
-  /// 2) Inserta perfil en usuarios (id/email/nombre_completo)
+  /// 2) El perfil se crea en public.perfiles mediante TRIGGER en Supabase
   ///
   /// Retorna null si todo sale bien, o un mensaje de error si falla.
   Future<String?> signUp({
@@ -176,9 +184,13 @@ class AuthService extends ChangeNotifier {
 
       final User? user = res.user;
 
-      // Si no regresa el user por alguna config rara
-      if (user == null) {
-        return 'No se pudo crear el usuario. Intenta nuevamente.';
+      // Si no regresa el user, normalmente es porque:
+      // - La confirmación de email está habilitada y no se crea sesión.
+      // Para el flujo actual (registro -> luego login manual), consideramos esto éxito.
+      if (user != null) {
+        // 2) NO insertamos manualmente en perfiles: lo hace el TRIGGER en Supabase.
+        // 3) Refrescamos el estado del perfil en la app.
+        await loadUserProfile();
       }
 
       // 2) Insertamos perfil en usuarios
@@ -197,14 +209,21 @@ class AuthService extends ChangeNotifier {
         // 'whatsapp': null,
         // 'url_foto_perfil': null,
       }, onConflict: 'id');
-
       return null;
     } on AuthException catch (e) {
+      if (kDebugMode) {
+        debugPrint('AuthException en signUp: ${e.message}');
+      }
       return e.message;
     } on PostgrestException catch (e) {
-      // Aquí cae cuando RLS bloquea el insert o hay error SQL
+      if (kDebugMode) {
+        debugPrint('PostgrestException en signUp: ${e.message}');
+      }
       return e.message;
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error inesperado en signUp: $e');
+      }
       return 'Error inesperado: $e';
     } finally {
       _setLoading(false);

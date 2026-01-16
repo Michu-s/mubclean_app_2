@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../../shared/services/auth_service.dart';
 
@@ -33,7 +34,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // Obtenemos el AuthService
     final auth = Provider.of<AuthService>(context, listen: false);
 
-    // Ejecutamos signUp (crea usuario en auth.users y crea perfil en usuarios)
+    // Ejecutamos signUp:
+    // - Crea usuario en auth.users
+    // - El perfil se crea en public.perfiles vía TRIGGER (sin insert manual en Flutter)
     final error = await auth.signUp(
       email: _emailCtrl.text.trim(),
       password: _passCtrl.text.trim(),
@@ -50,6 +53,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    if (kDebugMode) {
+      debugPrint('Registro completado. currentUser=${auth.currentUser?.id}');
+    }
+
     // Éxito: mostramos confirmación para que el usuario sepa que se guardó
     await showDialog<void>(
       context: context,
@@ -57,7 +64,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Cuenta creada'),
-          content: const Text('Se logró crear la cuenta'),
+          content: const Text(
+            'Se logró crear la cuenta. Ahora inicia sesión con tu correo y contraseña.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
@@ -67,6 +76,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       },
     );
+
+    // Importante: Forzamos cerrar sesión para mantener el flujo
+    // "registro -> login -> panel" (y evitar que Supabase deje sesión activa tras signUp).
+    await auth.signOut();
+    if (!mounted) return;
 
     // Éxito: regresamos al inicio (AuthGate se encargará de redirigir)
     Navigator.of(context).popUntil((route) => route.isFirst);
@@ -119,7 +133,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 validator: (v) {
                   final value = (v ?? '').trim();
                   if (value.isEmpty) return "Requerido";
-                  if (!value.contains('@') || !value.contains('.')) {
+                  final emailOk = RegExp(
+                    r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                  ).hasMatch(value);
+                  if (!emailOk) {
                     return "Email inválido";
                   }
                   return null;

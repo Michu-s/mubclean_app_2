@@ -10,6 +10,12 @@ const port = 3000;
 app.use(cors()); // Permite peticiones de otros orígenes (tu app Flutter)
 app.use(express.json()); // Permite al servidor entender JSON
 
+app.use(cors({
+  origin: ['https://mubclean-web2.vercel.app/', 'http://localhost:4200'], // Tu URL de Vercel y local para pruebas
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
   // --- Configuración Mercado Pago ---
 const client = new MercadoPagoConfig({
 accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,

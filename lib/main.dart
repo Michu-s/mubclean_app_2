@@ -8,7 +8,7 @@ import 'shared/services/auth_service.dart';
 import 'features/auth/login_screen.dart';
 
 // Imports de Funcionalidades
-import 'features/customer/customer_home.dart';
+import 'features/customer/customer_main_screen.dart';
 import 'features/admin/admin_dashboard.dart';
 import 'features/employee/employee_home.dart';
 
@@ -110,7 +110,7 @@ class _AuthGateState extends State<AuthGate> {
       return const EmployeeHomeScreen();
     } else {
       // Si es 'cliente' o cualquier otra cosa desconocida
-      return const CustomerHomeScreen();
+      return const CustomerMainScreen();
     }
   }
 }

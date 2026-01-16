@@ -103,3 +103,41 @@ class Solicitud {
     );
   }
 }
+
+class TicketSoporte {
+  final String id;
+  final String clienteId;
+  final String tipo; // 'consulta', 'incidencia', 'sugerencia', 'otro'
+  final String asunto;
+  final String descripcion;
+  final String estado; // 'abierto', 'en_proceso', 'resuelto'
+  final String? respuestaAdmin;
+  final String? fotoUrl;
+  final DateTime createdAt;
+
+  TicketSoporte({
+    required this.id,
+    required this.clienteId,
+    required this.tipo,
+    required this.asunto,
+    required this.descripcion,
+    required this.estado,
+    this.respuestaAdmin,
+    this.fotoUrl,
+    required this.createdAt,
+  });
+
+  factory TicketSoporte.fromJson(Map<String, dynamic> json) {
+    return TicketSoporte(
+      id: json['id'],
+      clienteId: json['cliente_id'],
+      tipo: json['tipo'],
+      asunto: json['asunto'],
+      descripcion: json['descripcion'],
+      estado: json['estado'] ?? 'abierto',
+      respuestaAdmin: json['respuesta_admin'],
+      fotoUrl: json['foto_url'],
+      createdAt: DateTime.parse(json['created_at']),
+    );
+  }
+}

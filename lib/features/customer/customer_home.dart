@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../shared/services/auth_service.dart';
 import '../../shared/models/marketplace_models.dart';
 import 'business_profile_screen.dart'; // <--- CAMBIO: Importamos Perfil en lugar de Wizard directo
-import './customer_requests_screens.dart';
 
 class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({super.key});
@@ -62,14 +61,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         elevation: 0,
         centerTitle: false,
         actions: [
-          IconButton(
-            icon: Icon(Icons.history, color: _primaryBlue),
-            tooltip: "Mis Pedidos",
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CustomerRequestsScreen()),
-            ),
-          ),
           IconButton(
             icon: Icon(Icons.logout, color: Colors.red[300]),
             onPressed: () => auth.signOut(),

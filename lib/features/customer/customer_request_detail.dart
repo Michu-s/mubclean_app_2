@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mubclean_marketplace/shared/services/mercadopago_service.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:app_links/app_links.dart';
 import '../../shared/models/marketplace_models.dart';
 
 class CustomerRequestDetailScreen extends StatefulWidget {
@@ -21,6 +21,7 @@ class _CustomerRequestDetailScreenState
     extends State<CustomerRequestDetailScreen> {
   final _supabase = Supabase.instance.client;
   final _mercadoPagoService = MercadoPagoService();
+  final _appLinks = AppLinks();
   bool _isLoading = true;
   List<dynamic> _items = [];
   Map<String, dynamic>? _evidencia;
@@ -51,13 +52,16 @@ class _CustomerRequestDetailScreenState
   }
 
   Future<void> _initDeepLinkListener() async {
-    _sub = uriLinkStream.listen((Uri? uri) {
-      if (!mounted || uri == null) return;
-      _handleDeepLink(uri);
-    }, onError: (err) {
-      if (!mounted) return;
-      debugPrint('Error en el deep link: $err');
-    });
+    _sub = _appLinks.uriLinkStream.listen(
+      (Uri? uri) {
+        if (!mounted || uri == null) return;
+        _handleDeepLink(uri);
+      },
+      onError: (err) {
+        if (!mounted) return;
+        debugPrint('Error en el deep link: $err');
+      },
+    );
   }
 
   void _handleDeepLink(Uri uri) {
@@ -82,13 +86,10 @@ class _CustomerRequestDetailScreenState
         default:
           return;
       }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: color,
-        ),
-      );
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
       // Refrescamos el estado para que se actualice la UI
       _fetchDetails();
     }
@@ -174,11 +175,13 @@ class _CustomerRequestDetailScreenState
         quantity: 1,
         price: _solicitudActual.precioTotal,
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Redirigiendo a Mercado Pago... Vuelve a la app para ver el estado."),
+            content: Text(
+              "Redirigiendo a Mercado Pago... Vuelve a la app para ver el estado.",
+            ),
             duration: Duration(seconds: 5),
             backgroundColor: Colors.blue,
           ),
@@ -191,15 +194,14 @@ class _CustomerRequestDetailScreenState
           .from('solicitudes')
           .update({'estado': 'en_proceso'})
           .eq('id', _solicitudActual.id);
-      
+
       // Refrescamos para mostrar el nuevo estado 'en_proceso'.
       await _fetchDetails();
-
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error al iniciar el pago: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error al iniciar el pago: $e")));
       }
     } finally {
       if (mounted) {

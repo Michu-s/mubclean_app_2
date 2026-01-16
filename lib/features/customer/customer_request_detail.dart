@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:mubclean_marketplace/shared/services/mercadopago_service.dart';
+import 'package:uni_links/uni_links.dart';
 import '../../shared/models/marketplace_models.dart';
 
 class CustomerRequestDetailScreen extends StatefulWidget {
@@ -17,10 +20,12 @@ class CustomerRequestDetailScreen extends StatefulWidget {
 class _CustomerRequestDetailScreenState
     extends State<CustomerRequestDetailScreen> {
   final _supabase = Supabase.instance.client;
+  final _mercadoPagoService = MercadoPagoService();
   bool _isLoading = true;
   List<dynamic> _items = [];
   Map<String, dynamic>? _evidencia;
   late Solicitud _solicitudActual;
+  StreamSubscription? _sub;
 
   // Datos de Agenda Confirmada
   DateTime? _fechaConfirmada;
@@ -33,6 +38,57 @@ class _CustomerRequestDetailScreenState
     initializeDateFormatting('es', null);
     _solicitudActual = widget.solicitud;
     _fetchDetails();
+    _initDeepLinkListener();
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initDeepLinkListener() async {
+    _sub = uriLinkStream.listen((Uri? uri) {
+      if (!mounted || uri == null) return;
+      _handleDeepLink(uri);
+    }, onError: (err) {
+      if (!mounted) return;
+      debugPrint('Error en el deep link: $err');
+    });
+  }
+
+  void _handleDeepLink(Uri uri) {
+    if (uri.scheme == 'tuapp') {
+      final status = uri.host;
+      String message;
+      Color color;
+
+      switch (status) {
+        case 'success':
+          message = "¡Pago aprobado! Tu servicio está en proceso.";
+          color = Colors.green;
+          break;
+        case 'failure':
+          message = "El pago fue rechazado. Inténtalo de nuevo.";
+          color = Colors.red;
+          break;
+        case 'pending':
+          message = "El pago quedó pendiente de confirmación.";
+          color = Colors.orange;
+          break;
+        default:
+          return;
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: color,
+        ),
+      );
+      // Refrescamos el estado para que se actualice la UI
+      _fetchDetails();
+    }
   }
 
   Future<void> _fetchDetails() async {
@@ -87,6 +143,50 @@ class _CustomerRequestDetailScreenState
     } catch (e) {
       debugPrint("Error loading: $e");
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handlePayment() async {
+    setState(() => _isLoading = true);
+    try {
+      // Abre la pestaña de pago. Ya no esperamos un resultado directo aquí.
+      await _mercadoPagoService.createPreferenceAndOpenCheckout(
+        context: context,
+        title: 'Servicio de Limpieza MubClean',
+        quantity: 1,
+        price: _solicitudActual.precioTotal,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Redirigiendo a Mercado Pago... Vuelve a la app para ver el estado."),
+            duration: Duration(seconds: 5),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+
+      // Actualización optimista: asumimos que el usuario intentará el pago.
+      // La confirmación real del pago debería venir por otros medios (ej. Webhooks).
+      await _supabase
+          .from('solicitudes')
+          .update({'estado': 'en_proceso'})
+          .eq('id', _solicitudActual.id);
+      
+      // Refrescamos para mostrar el nuevo estado 'en_proceso'.
+      await _fetchDetails();
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al iniciar el pago: $e")),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -445,6 +545,28 @@ class _CustomerRequestDetailScreenState
                                   ),
                                 ),
                               ],
+                            ),
+                          ],
+                          if (_solicitudActual.estado ==
+                              EstadoSolicitud.agendada) ...[
+                            const Divider(height: 25),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                icon: const Icon(Icons.payment),
+                                label: const Text("PAGAR CON MERCADO PAGO"),
+                                onPressed: _handlePayment,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ],

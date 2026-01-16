@@ -34,8 +34,7 @@ class AuthService extends ChangeNotifier {
       }
 
       if (event == AuthChangeEvent.signedIn ||
-          event == AuthChangeEvent.userUpdated ||
-          event == AuthChangeEvent.tokenRefreshed) {
+          event == AuthChangeEvent.userUpdated) {
         await loadUserProfile();
       }
     });

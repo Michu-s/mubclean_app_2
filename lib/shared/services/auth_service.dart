@@ -188,27 +188,21 @@ class AuthService extends ChangeNotifier {
       // - La confirmación de email está habilitada y no se crea sesión.
       // Para el flujo actual (registro -> luego login manual), consideramos esto éxito.
       if (user != null) {
-        // 2) NO insertamos manualmente en perfiles: lo hace el TRIGGER en Supabase.
+        // 2) Insertamos perfil en usuarios manualmente para asegurar consistencia
+        // IMPORTANTE: id debe ser el mismo que auth.users.id
+        await _supabase.from('perfiles').upsert({
+          'id': user.id,
+          'email': email,
+          'nombre_completo': nombre,
+          // campos opcionales:
+          // 'telefono': null,
+          // 'whatsapp': null,
+          // 'url_foto_perfil': null,
+        }, onConflict: 'id');
+
         // 3) Refrescamos el estado del perfil en la app.
         await loadUserProfile();
       }
-
-      // 2) Insertamos perfil en usuarios
-      // IMPORTANTE: id debe ser el mismo que auth.users.id
-      //
-      // NOTA:
-      // Si tienes "Email confirmation" activa y NO hay sesión,
-      // este insert puede fallar por RLS si exige authenticated.
-      // Por eso te dejo abajo el SQL con TRIGGER recomendado para que siempre funcione.
-      await _supabase.from('perfiles').upsert({
-        'id': user.id,
-        'email': email,
-        'nombre_completo': nombre,
-        // campos opcionales:
-        // 'telefono': null,
-        // 'whatsapp': null,
-        // 'url_foto_perfil': null,
-      }, onConflict: 'id');
       return null;
     } on AuthException catch (e) {
       if (kDebugMode) {

@@ -9,7 +9,7 @@ const port = 3000;
 
 // --- Middlewares ---
 app.use(cors({
-  origin: ['https://mubcleanweb2.vercel.app/', 'http://localhost:4200'], // Tu URL de Vercel y local
+  origin: ['https://mubcleanweb2.vercel.app', 'http://localhost:4200'], // Corregido: sin guion y sin la barra final
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -63,8 +63,8 @@ app.post('/create_preference', verifyToken, async (req, res) => {
       items: [
         {
           title: title,
-          quantity: Number(quantity),
-          unit_price: Number(unit_price),
+          quantity: Number(quantity=1),
+          unit_price: Number(unit_price=500),
           currency_id: 'MXN',
         },
       ],

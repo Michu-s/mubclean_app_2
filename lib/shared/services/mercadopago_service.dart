@@ -2,26 +2,35 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_custom_tabs/flutter_custom_tabs.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Importar Supabase
 
 class MercadoPagoService {
-  // Para web, 'localhost' es correcto. Para móvil, usa la IP de tu red.
-  final String _baseUrl = 'http://localhost:3000';
+  // URL del backend de producción en Render
+  final String _baseUrl = 'https://mi-backend-c2yr.onrender.com';
 
   Future<void> createPreferenceAndOpenCheckout({
-    required BuildContext context, // Se necesita para el Theme
+    required BuildContext context,
     required String title,
     required int quantity,
     required double price,
   }) async {
     final url = Uri.parse('$_baseUrl/create_preference');
 
+    // Obtener el token de acceso del usuario actual de Supabase
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) {
+      throw 'Usuario no autenticado. No se puede crear la preferencia.';
+    }
+    final accessToken = session.accessToken;
+
     try {
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken', // Enviar el token JWT
+        },
         body: json.encode({
-          // El backend ahora tiene valores fijos, pero mantenemos el envío
-          // por si se revierte el cambio en el futuro.
           'title': title,
           'quantity': quantity,
           'unit_price': price,

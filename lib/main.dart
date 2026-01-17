@@ -16,7 +16,7 @@ import 'features/employee/employee_home.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  const supabaseUrl = 'https://wtlitcaiboefcujqrmrg.supabase.co';
+  const supabaseUrl = 'https://mi-backend-c2yr.onrender.com';
   // const supabaseAnonKey = '...'; // Removed unused key
 
   await Supabase.initialize(

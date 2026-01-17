@@ -10,9 +10,9 @@ class MercadoPagoService {
 
   Future<void> createPreferenceAndOpenCheckout({
     required BuildContext context,
-    required String title,
-    required int quantity,
-    required double price,
+    String? title, // Hacemos opcional para la prueba
+    int? quantity, // Hacemos opcional para la prueba
+    double? price, // Hacemos opcional para la prueba
   }) async {
     final url = Uri.parse('$_baseUrl/create_preference');
 
@@ -31,9 +31,10 @@ class MercadoPagoService {
           'Authorization': 'Bearer $accessToken', // Enviar el token JWT
         },
         body: json.encode({
-          'title': title,
-          'quantity': quantity,
-          'unit_price': price,
+          // Valores predefinidos para la prueba. ¡REVERTIR ESTO DESPUÉS DE PROBAR!
+          'title': 'Servicio de Prueba MubClean',
+          'quantity': 1,
+          'unit_price': 2000.00,
         }),
       );
 
@@ -43,7 +44,6 @@ class MercadoPagoService {
 
         // Lanza la URL del checkout usando flutter_custom_tabs
         await _launchURL(context, checkoutUrl);
-
       } else {
         debugPrint('Error del servidor: ${response.body}');
         throw 'Error al crear la preferencia de pago.';

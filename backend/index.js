@@ -49,22 +49,21 @@ app.get('/', (req, res) => {
   res.send('El backend de Mercado Pago está funcionando!');
 });
 
-// Endpoint para crear la preferencia de pago (ahora protegido)
+// Endpoint para crear la preferencia de pago (ahora protegido y con datos fijos para prueba)
 app.post('/create_preference', verifyToken, async (req, res) => {
   try {
-    // Usar los datos del body del request
-    const { title, quantity, unit_price } = req.body;
-
-    if (!title || !quantity || !unit_price) {
-      return res.status(400).json({ error: 'Faltan datos del producto (title, quantity, unit_price)' });
-    }
+    // Para la prueba, ignoramos el body del request y usamos valores fijos.
+    // const { title, quantity, unit_price } = req.body;
+    // if (!title || !quantity || !unit_price) {
+    //   return res.status(400).json({ error: 'Faltan datos del producto (title, quantity, unit_price)' });
+    // }
 
     const body = {
       items: [
         {
-          title: title,
-          quantity: Number(quantity=1),
-          unit_price: Number(unit_price=500),
+          title: 'Servicio de Prueba (Backend)',
+          quantity: 1,
+          unit_price: 2000.0,
           currency_id: 'MXN',
         },
       ],
